@@ -1,0 +1,39 @@
+---
+title: "PrácticaModelos"
+author: "Marc Gil Arnau"
+date: "2025-02-20"
+output: html_document
+---
+
+Cargamos los datos y las librerias
+```{r}
+library(readr)
+library(caret) # Para la transformación Yeo-Johnson
+library(lmtest) # Para la prueba de homocedastidad
+datos <- read.csv("/home/alumnos/marc/DataScience/forest+fires/forestfires.csv", sep=",", header=TRUE)
+#View(forestfires)
+```
+
+# EDA
+Tamaño del dataset
+```{r}
+dim(datos)
+```
+Hay 517 observaciones y 13 variables.
+
+Tipos de variables
+```{r}
+str(datos)
+```
+Variables continuas: FFMC, DMC, DC, ISI, temp, wind, rain y area.
+Variables discretas: RH, X e Y. 
+Variables texto: month y day.
+
+```{r}
+anyNA(datos) # Vemos si hay valores faltantes.
+```
+No hay datos faltantes.
+
+```{r}
+table(datos$area>0)
+```

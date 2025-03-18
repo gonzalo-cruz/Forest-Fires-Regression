@@ -1,20 +1,35 @@
 ---
 title: "PrácticaModelos"
-author: "Marc Gil Arnau"
+author: "Marc Gil Arnau, Gonzalo Cruz Gómez, Yasmin Ezzarqtouni Marzoug"
 date: "2025-02-20"
 output: html_document
 ---
 
+## Índice
+
+## Introducción 
+
+## Comprensión del problema
+
+## Comprensión de los datos y EDA
 Cargamos los datos y las librerias
 ```{r}
 library(readr)
 library(caret) # Para la transformación Yeo-Johnson
 library(lmtest) # Para la prueba de homocedastidad
-datos <- read.csv("/home/alumnos/marc/DataScience/forest+fires/forestfires.csv", sep=",", header=TRUE)
+library(corrplot)
+library(dplyr)
+library(ggplot2)
+datos <- read.csv("forestfires.csv", sep=",", header=TRUE)
 #View(forestfires)
 ```
 
-# EDA
+Visualizamos las primeras filas del dataset: 
+```{r}
+head(datos)
+```
+
+### EDA
 Tamaño del dataset
 ```{r}
 dim(datos)
@@ -29,11 +44,177 @@ Variables continuas: FFMC, DMC, DC, ISI, temp, wind, rain y area.
 Variables discretas: RH, X e Y. 
 Variables texto: month y day.
 
+Vamos a ver si tenemos valores faltantes: 
 ```{r}
-anyNA(datos) # Vemos si hay valores faltantes.
+anyNA(datos) 
 ```
 No hay datos faltantes.
 
+Vemos cuantos valores del target (area) son distintos de 0 y cuantos iguales a 0
 ```{r}
 table(datos$area>0)
 ```
+
+Visualizamos nuestras variables continuas para ver su distribución: 
+```{r}
+datos_cont <- datos %>%
+  dplyr::select(FFMC, DMC, DC, ISI, temp, RH, wind, rain, area) %>%  
+  tidyr::gather(key = "Variable", value = "Value")
+
+ggplot(datos_cont, aes(x = Value, fill = Variable)) +
+  geom_histogram(bins = 20, color = "black", alpha = 0.5, aes(y =..density..)) + 
+  geom_density(alpha = 0.3, color = "black", aes(y = ..density..)) + 
+  facet_wrap(~ Variable, scales = "free") +
+  labs(title = "Data", x = "Value", y = "Density") +
+  scale_fill_manual(values = c("skyblue", "lightgreen", "lightcoral", "lightpink", "lightyellow", "orchid", "tomato", "lightblue", "grey")) +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+Aquí podemos ver cómo tenemos muchos valores del área en 0, lo mismo pasa con la lluvia. La mayoría de nuestras variables no siguen una distribución concreta, aunque algunas se asemejan bastante a una distribución normal, como la temperatura. 
+
+A continuación vamos a visualizar nuestras variables discretas: 
+
+```{r}
+ datos_dis <- datos %>%
+    tidyr::pivot_longer(cols = c(RH, X, Y),
+                        names_to = "variable", values_to = "value")
+
+  combined_plot <- ggplot(datos_dis, aes(x = value)) +
+    geom_bar(fill = "lightblue", color = "black") +
+    facet_wrap(~ variable, scales = "free_x") +
+    labs(title = "Discrete variables",
+         x = "Value",
+         y = "Count") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+  print(combined_plot)
+```
+Podemos ver cómo RH toma muchos valores distintos, mientras X e Y toman bastantes pocos valores. 
+
+Vamos a ver cómo se relacionan nuestras variables. 
+
+Primeramente vamos a hacer una matriz de correlaciones para ver cómo de correladas están nuestras variables. 
+
+```{r}
+# seleccionamos solo las variables numéricas de nuestro dataset
+datos_numericos <- datos[, !(names(datos) %in% c("month", "day", "year"))]
+
+cor_matrix <- cor(datos_numericos)
+
+corrplot(cor_matrix, method = "color", 
+         type = "upper", order = "hclust", 
+         addCoef.col = "black", 
+         tl.col = "black", tl.srt = 45, 
+         diag = FALSE) 
+```
+Podemos ver como muchas de nuestras variables están bastante correladas.
+
+-   FFMC tiene bastante correlación positiva con ISI y algo menos con temp, DMC y DC, y algo de correlación negativa con RH
+
+-   ISI tiene algo de correlación positiva con temp, DMC y DC
+
+-   temp tiene bastante correlación con DMC y DC, así como mucha correlación negativa con RH
+
+-   DMC tiene mucha correlación con DC, la más alta de toda la matriz 
+
+-   Por último, X e Y tienen una correlación relativamente alta. 
+
+Una correlación positiva alta quiere decir que si aumenta uno, el otro también lo hará. Lo contrario ocurre para una correlación negativa, en ese caso al aumentar una variable, la otra disminuirá. En nuestro caso, esto solo ocurrirá de manera significativa con la temperatura y RH.
+
+Podemos ver que hay bastante correlación entre algunas de nuestras variables. Es por ello que más adelante tendremos que hacer una selección de variables. 
+
+Si hacemos un pairs plot, podremos ver claramente cómo están relacionadas dichas variables: 
+```{r}
+variables <- c("FFMC", "DMC", "DC", "ISI", "temp", "RH", "X", "Y")
+
+pairs(datos[, variables], 
+      main = "Pairs Plot")
+```
+
+Podemos ver como DC y DMC tienen una relación bastante lineal, temp y RH también, aunque en este caso se trata de una recta descendiente, como pudimos ver por la correlación negativa de nuestras variables. FFMC sigue una relación bastante lineal con ISI, aunque también se puede ver con temp, DMC, DC, incluso con RH; aunque al estar estos valores todos en la parte superior de la gráfica puede ser difícil verlo. 
+
+A continuación vamos a ver cómo se relacionan nuestras variables con la variable objetivo, con ello buscaremos encontrar relaciones que nos faciliten las tareas de regresión. 
+
+Primeramente, vamos a ver cual es el mes en el que más área se quema : 
+
+Para ello primeramente ordenaremos los meses para que aparezcan de enero a diciembre y después los transformaremos en factores. 
+```{r}
+month_order <- c("jan", "feb", "mar", "apr", "may", "jun",
+                 "jul", "aug", "sep", "oct", "nov", "dec")
+datos$month <- factor(datos$month, levels = month_order) 
+ggplot(datos, aes(x = month, y = area)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Area over Months", x = "Month", y = "Area")
+
+ggplot(datos, aes(x = month, y = area)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Area by Month", x = "Month", y = "Area")
+
+```
+Vemos como el mes en el que más área se quema es septiembre, seguido de agosto. También podemos ver que la mayoría de incendios cubren un área relativamente pequeña, no superando en su mayoría las 200 ha, sin embargo tenemos tres incendios muy grandes en nuestros datos, uno en julio que quemó cerca de 300 ha, uno en agosto que quemó unas 750 ha y por último, el más grande, que tuvo lugar en septiembre y quemó más de 1000 ha.
+
+De la matriz de correlaciones ya podemos extraer que ninguna variable va a tener relación alguna con nuestra variable objetivo, aun así vamos a visualizar nuestras variables frente a la variable objetivo para comprobarlo: 
+
+Primeramente lo haremos con la temperatura, que es la variable que, aunque muy poca, tiene más correlación con el área 
+```{r}
+ggplot(datos, aes(x = temp, y = area)) +
+  geom_point() +
+  labs(x = "temp", y = "area", title = "temp vs. area") +
+  theme_bw()
+
+```
+Podemos probar a eliminar los ceros a ver si, cuando hay un incendio, la temperatura tiene algo que ver: 
+
+```{r}
+datos_filtrados <- datos %>% filter(area != 0)
+ggplot(datos_filtrados, aes(x = temp, y = area)) +
+  geom_point() +
+  labs(x = "temp", y = "area", title = "temp vs. area") +
+  theme_bw()
+
+```
+Vemos que, como la mayoría de los incendios que hay son pequeños, no vemos ninguna relación. A pesar de eso, destacan los incendios grandes que comentamos anteriormente, en los cuales se puede ver que la temperatura era mayor de 25 grados, lo cual indica una temperatura relativamente alta. 
+
+Vamos a ver el resto de variables: 
+```{r}
+plot_area_variables <- function(datos) {
+  variables <- c("FFMC", "DMC", "DC", "ISI", "RH", "wind", "rain") 
+
+  for (var in variables) {
+    p1 <- ggplot(datos, aes(x = .data[[var]], y = area)) +
+      geom_point() +
+      labs(x = var, y = "area", title = paste(var, "vs. area")) +
+      theme_bw()
+    print(p1)
+  }
+}
+plot_area_variables(datos)
+```
+Vemos como ninguna tiene relación lineal con la variable objetivo. Aunque si que es cierto que, a mayor FFMC, nos encontramos un mayor volumen de incendios, además de los dos grandes incendios que tenemos en el dataset. 
+
+Vamos a probar de nuevo a eliminar los ceros a ver si tenemos alguna relación
+
+```{r}
+plot_area_variables <- function(datos_filtrados) {
+  variables <- c("FFMC", "DMC", "DC", "ISI", "RH", "wind", "rain") 
+
+  for (var in variables) {
+    p1 <- ggplot(datos_filtrados, aes(x = .data[[var]], y = area)) +
+      geom_point() +
+      labs(x = var, y = "area", title = paste(var, "vs. area")) +
+      theme_bw()
+    print(p1)
+  }
+}
+plot_area_variables(datos_filtrados)
+```
+Vemos como de nuevo no podemos extraer una relación clara entre nuestras variables y la variable objetivo. Esto significa que cuando apliquemos regresión lineal a nuestra variable objetivo, no obtendremos un modelo que pueda predecir de manera óptima. Es por ello que tendremos que hacer transformaciones de nuestras variables, para poder hacer modelos no lineales que nos ayuden a predecir mejor nuestro target. También de todas estas gráficas, podemos ver los dos incendios grandes de manera clara, ya que el valor del área es mucho más grande en estos dos casos que en los demás. 
+
+## Regresión lineal
+
+## Selección de variables y regularización
+
+## Modelos no lineales
+
+## Conclusiones

@@ -587,4 +587,58 @@ Vemos como de nuevo no podemos extraer una relación clara entre nuestras variab
 
 ## Modelos no lineales
 
+De los modelos lineales claramente no podemos extraer demasiadas conclusiones ni hacer predicciones precisas. Es por ello que debemos utilizar modelos con transformaciones no lineales para conseguir una mejor predicción. 
+
+Primeramente utilizaremos regresión polinómica 
+
+```{r}
+set.seed(123)
+# ajuste del modelo polinómico de grado 2
+modelo_polinomico <- lm(datos$area ~ poly(datos$temp,2))
+summary(modelo_polinomico)
+
+plot(datos$temp, datos$area, main = "Regresión Polinómica de Segundo Grado", pch = 19, col = "blue")
+lines(datos$temp, predict(modelo_polinomico), col = "red", lwd = 2)
+
+par(mfrow = c(2, 2))
+plot(modelo_polinomico)
+```
+De la tabla podemos ver que hacer un modelo polinómico no merece la pena, ya que nos indiica que solamente es relevante el primer grado del polinomio, es decir, un modelo lineal es preferible sobre el modelo polinómico de grado dos. Asimismo, podemos ver como los residuos no siguen una distribución normalya que el valor de casi todos es 0. Además, nuestro r^2 es de 0.00743, lo cual nos indica que nuestro modelo no predice bien. Podemos probar eliminando los ceros para predecir qué pasa cuando no se eliminan los ceros: 
+
+```{r}
+set.seed(123)
+df_filtered <- datos %>% filter(area != 0)
+# ajuste del modelo polinómico de grado 2
+modelo_polinomico <- lm(df_filtered$area ~ poly(df_filtered$temp,2))
+summary(modelo_polinomico)
+
+plot(df_filtered$temp, df_filtered$area, main = "Regresión Polinómica de Segundo Grado", pch = 19, col = "blue")
+lines(df_filtered$temp, predict(modelo_polinomico), col = "red", lwd = 2)
+
+par(mfrow = c(2, 2))
+plot(modelo_polinomico)
+```
+Vemos como eliminar los ceros no nos ayuda, ya que la mayoría de los incendios son pequeños y seguimos sin tener unos residuos normales. El eliminar los ceros hace que la variable temperatura tenga menor importancia aún, con un p valor mayor de 0.05, también aumenta nuestro error residual y disminuye nuesto R², por lo que podemos decir que hace que nuestro modelo sea peor. 
+
+Como hemos podido ver, un modelo polinómico no es lo mejor para nuestros datos, vamos a utilizar un modelo logarítmico: 
+
+```{r}
+# transformamos nuestra variable objetivo con un logaritmo
+
+log_area <- log(datos$area + 1)
+modelo_log <- lm(log_area ~ datos$ISI)
+summary(modelo_log)
+plot(modelo_log)
+```
+
+```{r}
+# transformamos nuestra variable objetivo con un logaritmo
+
+log_area_filt <- log(df_filtered$area + 1)
+modelo_log <- lm(log_area_filt ~ df_filtered$ISI)
+summary(modelo_log)
+plot(modelo_log)
+```
+
+
 ## Conclusiones

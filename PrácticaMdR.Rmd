@@ -11,6 +11,22 @@ output: html_document
 
 ## Comprensión del problema
 
+**Variables:** 
+
+1. **X** - Coordenada espacial en el eje X dentro del mapa del parque Montesinho: de 1 a 9.
+2. **Y** - Coordenada espacial en el eje Y dentro del mapa del parque Montesinho: de 2 a 9.
+3. **month** - Mes del año: de "jan" (enero) a "dec" (diciembre).
+4. **day** - Día de la semana: de "mon" (lunes) a "sun" (domingo).
+5. **FFMC** - Índice FFMC del sistema FWI: de 18.7 a 96.20.
+6. **DMC** - Índice DMC del sistema FWI: de 1.1 a 291.3.
+7. **DC** - Índice DC del sistema FWI: de 7.9 a 860.6.
+8. **ISI** - Índice ISI del sistema FWI: de 0.0 a 56.10.
+9. **temp** - Temperatura en grados Celsius: de 2.2 a 33.30.
+10. **RH** - Humedad relativa en %: de 15.0 a 100.
+11. **wind** - Velocidad del viento en km/h: de 0.40 a 9.40.
+12. **rain** - Lluvia en el exterior en mm/m²: de 0.0 a 6.4.
+13. **area** - Área quemada del bosque (en hectáreas): de 0.00 a 1090.84.
+
 ## Comprensión de los datos y EDA
 Cargamos los datos y las librerias
 ```{r}
@@ -20,8 +36,14 @@ library(lmtest) # Para la prueba de homocedastidad
 library(corrplot)
 library(dplyr)
 library(ggplot2)
+library(readr)
+library(caret)
+library(tidyverse)
+library(knitr) 
+library(corrplot)
+library(gt)
+library(GGally)
 datos <- read.csv("forestfires.csv", sep=",", header=TRUE)
-#View(forestfires)
 ```
 
 Visualizamos las primeras filas del dataset: 
@@ -55,71 +77,419 @@ Vemos cuantos valores del target (area) son distintos de 0 y cuantos iguales a 0
 table(datos$area>0)
 ```
 
-Visualizamos nuestras variables continuas para ver su distribución: 
-```{r}
-datos_cont <- datos %>%
-  dplyr::select(FFMC, DMC, DC, ISI, temp, RH, wind, rain, area) %>%  
-  tidyr::gather(key = "Variable", value = "Value")
+Primeramente vamos a hacer un análisis univariante: 
+#### Estudio por variable:
 
-ggplot(datos_cont, aes(x = Value, fill = Variable)) +
-  geom_histogram(bins = 20, color = "black", alpha = 0.5, aes(y =..density..)) + 
-  geom_density(alpha = 0.3, color = "black", aes(y = ..density..)) + 
-  facet_wrap(~ Variable, scales = "free") +
-  labs(title = "Data", x = "Value", y = "Density") +
-  scale_fill_manual(values = c("skyblue", "lightgreen", "lightcoral", "lightpink", "lightyellow", "orchid", "tomato", "lightblue", "grey")) +
-  theme_bw() +
-  theme(legend.position = "none")
-```
-Aquí podemos ver cómo tenemos muchos valores del área en 0, lo mismo pasa con la lluvia. La mayoría de nuestras variables no siguen una distribución concreta, aunque algunas se asemejan bastante a una distribución normal, como la temperatura. 
+##### **Área (variable objetivo):**
 
-A continuación vamos a visualizar nuestras variables discretas: 
+La variable **área** representa la superficie quemada en un incendio forestal, medida en hectáreas (ha). Los valores de esta variable varían de 0.00 a 1090.84 ha, pero está muy sesgada hacia 0.0, lo que indica que la mayoría de los incendios son pequeños. Esta variable es nuestra variable objetivo y nos sirve para entender la relación entre la magnitud del incendio y las condiciones meteorológicas y geográficas.
 
 ```{r}
- datos_dis <- datos %>%
-    tidyr::pivot_longer(cols = c(RH, X, Y),
-                        names_to = "variable", values_to = "value")
-
-  combined_plot <- ggplot(datos_dis, aes(x = value)) +
-    geom_bar(fill = "lightblue", color = "black") +
-    facet_wrap(~ variable, scales = "free_x") +
-    labs(title = "Discrete variables",
-         x = "Value",
-         y = "Count") +
-    theme_bw() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1))  
-  print(combined_plot)
+summary(datos$area)    
 ```
-Podemos ver cómo RH toma muchos valores distintos, mientras X e Y toman bastantes pocos valores. 
 
-Vamos a ver cómo se relacionan nuestras variables. 
+```{r}
+hist(datos$area, 
+     main = "Histograma de Área Quemada", 
+     xlab = "Área (hectáreas)", 
+     ylab = "Frecuencia", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 40)  
+```
+
+**Análisis de la variable área**
+
+Observamos que la variable tiene una distribución altamente sesgada hacia valores bajos, con un mínimo de 0.00 y una mediana de apenas 0.52 hectáreas, lo que indica que la mayoría de los incendios afectan superficies pequeñas. Sin embargo, la media de 12.85 hectáreas es significativamente más alta debido a valores extremos, como el máximo de 1090.84 hectáreas. 
+
+* **Histograma:** tiene una distribución altamente sesgada hacia la derecha, con una concentración predominante de valores cercanos a 0.0 hectáreas. Esto indica que la mayoría de los incendios forestales registrados en el dataset abarcan áreas quemadas muy pequeñas, siendo los incendios de mayor magnitud eventos inusuales.
+
+##### **Coordenada X**
+
+La variable X representa la coordenada horizontal dentro del parque Montesinho en Portugal, donde se han registrado incendios forestales. Es una variable discreta con valores que oscilan entre 1 y 9, indicando la ubicación espacial de los incendios en el eje X del mapa. Esta variable nos permite situar geográficamente cada incendio.
+
+
+```{r}
+summary(datos$X)
+```
+
+```{r}
+barplot(table(datos$X), col = "steelblue", main = "Distribución de X", xlab = "Coordenada X", ylab = "Frecuencia")
+
+```
+
+```{r}
+table(datos$X)
+```
+
+**Análisis de los resultados de la variable X**
+
+Los resultados de la variable X nos muestran que las coordenadas X dentro del parque Montesinho están distribuidas de manera relativamente centrada, con valores que van del **1** al **9**. La mayoría de los incendios se encuentran en las coordenadas **4** (91 incendios), **6** (86 incendios) y **2** (73 incendios), representando un porcentaje significativo de las observaciones.
+
+El **mínimo es 1** y el **máximo es 9**, lo que indica que la variable **X** cubre un rango de ubicaciones en el eje horizontal del mapa del parque. La **media de 4.669** y la **mediana de 4** reflejan que la distribución de los incendios está ligeramente sesgada hacia las coordenadas más altas (6 y 7), ya que la media es mayor que la mediana.
+
+
+##### **Coordenada Y**
+
+La variable **Y** representa la coordenada vertical dentro del mapa del parque Montesinho en Portugal, similar a la variable **X**, pero en el eje vertical. Es una variable discreta, con valores que oscilan entre 2 y 9. Junto con la variable X, permite ubicar geográficamente los incendios forestales dentro del parque.
+
+```{r}
+summary(datos$Y)
+```
+
+```{r}
+barplot(table(datos$Y), col = "steelblue", main = "Distribución de Y", xlab = "Coordenada Y", ylab = "Frecuencia")
+```
+
+
+```{r}
+table(datos$Y)
+```
+
+**Análisis de la variable Y**
+
+En la variable **Y** observamos que las coordenadas **4** y **6** concentran la mayoría de los incendios, mientras que la coordenada **8** tiene la menor frecuencia, con solo un registro. Esto sugiere que algunas áreas son más propensas a incendios que otras, posiblemente debido a factores como la vegetación, el clima o la exposición a condiciones meteorológicas más extremas.
+
+
+##### **Mes**
+
+La variable **mes** es una variable categórica que representa el mes del año en el que ocurrió cada incendio. Los valores posibles son los nombres de los 12 meses del año. Esta variable es clave para identificar patrones estacionales en la ocurrencia de incendios, ya que los incendios pueden estar influenciados por las condiciones climáticas específicas de cada mes.
+
+```{r}
+# Crear el gráfico
+barplot(table(datos$month), 
+        col = "steelblue", 
+        main = "Distribución de los Incendios por Mes", 
+        xlab = "Mes", 
+        ylab = "Frecuencia",  
+        las = 2)  # las = 2 para rotar los nombres de los meses
+```
+
+
+```{r}
+table(datos$month)
+```
+
+**Análisis de la variable month**
+
+La variable **month** nos muestra que los incendios son más comunes en los meses de **agosto y septiembre**, con 184 y 172 incendios registrados respectivamente, probablemente debido al clima más cálido y seco. En cambio, en **enero, mayo y noviembre** hay muy pocos incendios, con 2, 2 y 1 incendios respectivamente, lo que indica que estas épocas tienen un menor riesgo. Esto demuestra que los incendios siguen un patrón relacionado con las estaciones del año. 
+
+
+##### **Día de la semana**
+
+La variable **día** es una variable **categórica** que representa el día de la semana en que ocurrió un incendio forestal. Los valores posibles son 'mon' (lunes), 'tue' (martes), 'wed' (miércoles), 'thu' (jueves), 'fri' (viernes), 'sat' (sábado) y 'sun' (domingo). Esta variable nos dice en qué día de la semana ocurrió el incendio, lo que nos puede ayudar a identificar si hay patrones relacionados con los días en los que ocurren más incendios. 
+
+
+```{r}
+barplot(table(datos$day), main="Frecuencia de Días", col="steelblue", border="black")
+```
+
+
+```{r}
+table(datos$day)
+```
+
+**Análisis de la variable day**
+
+Los días **domingo** y **viernes** tienen la mayor cantidad de registros, con 95 y 85 incendios respectivamente, indicando que estos días tienen mayor actividad. Por otro lado, el miércoles presenta la menor frecuencia, con solo 54 incendios registrados, lo que sugiere una actividad más baja en este día. Los otros días tienen frecuencias intermedias, destacando variaciones en la ocurrencia de incendios a lo largo de la semana. Esto podría estar influenciado por factores como patrones climáticos o actividades humanas.
+
+
+##### **FFMC (Fine Fuel Moisture Code)**
+
+La variable **FFMC** (Fine Fuel Moisture Code) es un índice utilizado en el sistema de Índices de Peligro de Incendios Forestales (FWI). Este índice mide la **humedad de los combustibles finos**, como hojas secas y ramitas, que son fácilmente inflamables. Los valores de **FFMC** varían entre **18.7** y **96.20**, donde un valor bajo indica que los combustibles están más húmedos y, por lo tanto, es menos probable que se inicien incendios, mientras que un valor alto indica que los combustibles están muy secos y es más fácil que se produzcan incendios.
+
+```{r}
+summary(datos$FFMC)
+```
+
+```{r}
+hist(datos$FFMC, 
+     main = "Distribución de FFMC (Fine Fuel Moisture Code)", 
+     xlab = "FFMC", 
+     ylab = "Frecuencia", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 50)
+```
+
+```{r}
+boxplot(datos$FFMC, 
+        main = "Boxplot de FFMC (Fine Fuel Moisture Code)", 
+        ylab = "FFMC", 
+        col = "lightgreen")
+```
+**Análisis de la variable FFMC**
+
+* **Histograma:** muestra una distribución sesgada a la izquierda con la mayoría de los valores concentrados entre 80 y 100. Esto indica que, en la mayoría de los casos, el combustible fino (como hojas y ramas pequeñas) tiene muy poca humedad, lo que incrementa el riesgo de incendio.
+
+* **Boxplot:** nos muestra que la mayoría de los valores son altos, reflejando condiciones muy secas. La mediana está cercana al extremo superior, lo que confirma esta tendencia. Además, hay algunos valores atípicos en el rango bajo, que representan casos aislados de condiciones de menor humedad.
+
+###### **DMC (Duff Moisture Code)**
+
+La variable **DMC** (Duff Moisture Code) es otro índice del sistema FWI (Fire Weather Index) utilizado para medir la **humedad de los combustibles más gruesos**, como hojas y ramas secas, que son más difíciles de incendiar pero que pueden contribuir a la propagación del fuego.
+
+Los valores de DMC varían entre 1.1 y 291.3, donde un valor bajo indica que los combustibles están relativamente húmedos y es menos probable que se inicie un incendio, mientras que un valor alto sugiere que los combustibles están secos y hay mayor riesgo de incendio.
+
+
+```{r}
+summary(datos$DMC)
+```
+
+```{r}
+hist(datos$DMC, 
+     main = "Histograma de DMC (Duff Moisture Code)", 
+     xlab = "DMC", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 40)
+```
+
+```{r}
+boxplot(datos$DMC, 
+        main = "Boxplot de DMC (Duff Moisture Code)", 
+        ylab = "DMC", 
+        col = "lightgreen")
+```
+
+**Análisis de los resultados de DMC**
+
+* **Histograma:** muestra que los valores más comunes de humedad de los combustibles gruesos están entre 50 y 150, con un pico alrededor de 100. Valores de DMC altos, que indican mayor riesgo de incendio, son menos frecuentes. Esto sugiere que, en general, los combustibles son moderadamente húmedos, pero aún existe un riesgo de incendios en condiciones de baja humedad.
+
+* **Boxplot:** observamos valores atípicos en la parte superior entre 250 y 300, lo que indica que en algunos incendios el suelo estaba extremadamente seco. La mediana está en la parte media del rango, indicando que la mayoría de los incendios ocurren cuando la humedad del suelo está moderada o baja.
+
+
+
+
+##### **DC**
+
+La variable **DC** (Drought Code) es un índice del sistema FWI que mide la **sequedad de los combustibles más profundos** y de mayor tamaño, como la capa de tierra seca y material orgánico en descomposición. Su rango va de 7.9 a 860.6, donde valores bajos indican mayor humedad y menor riesgo de incendio, mientras que valores altos reflejan sequedad extrema y un mayor riesgo de propagación del fuego.
+
+```{r}
+summary(datos$DC)
+```
+
+```{r}
+hist(datos$DC, 
+     main = "Histograma de DC (Drought Code)", 
+     xlab = "DC", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 30)
+```
+
+```{r}
+boxplot(datos$DC, 
+        main = "Boxplot de DC (Drought Code)", 
+        ylab = "DC", 
+        col = "lightgreen")
+```
+**Análisis de los resultados de DC**
+
+- **Histograma:** la distribución sesgada hacia la izquierda (asimetría positiva) muestra que la mayoría de los valores están entre 600 y 800, con un pico claro alrededor de 700, lo que refleja condiciones frecuentes de sequedad acumulada alta. Este patrón implica un mayor riesgo de incendios debido a la abundancia de material seco, aunque también se observa una ligera asimetría hacia valores más bajos.
+
+- **Boxplot:** la mediana del DC está cerca de 700, confirmando la concentración observada en el histograma. Además, observamos que algunos valores atípicos más bajos podrían corresponder a periodos de mayor humedad o climas inusualmente húmedos.
+
+
+##### **ISI (Initial Spread Index)**
+
+La variable **ISI** (Initial Spread Index) es otro índice del sistema FWI (Fire Weather Index) que mide la **velocidad de propagación** del fuego en condiciones de viento y humedad actuales. Este índice se calcula utilizando la temperatura, la humedad relativa y la velocidad del viento, y refleja el riesgo inmediato de propagación del fuego bajo condiciones meteorológicas específicas.
+
+Los valores de ISI van de 0.0 a 56.10, donde un valor bajo indica que las condiciones para la propagación del fuego son favorables, mientras que un valor más alto sugiere un riesgo elevado, ya que el fuego se propaga más rápido debido a condiciones más secas y vientos fuertes.
+
+```{r}
+summary(datos$ISI)
+```
+
+```{r}
+hist(datos$ISI, 
+     main = "Histograma de ISI (Initial Spread Index)", 
+     xlab = "ISI", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 40)
+
+```
+
+
+```{r}
+boxplot(datos$ISI, 
+        main = "Boxplot de ISI (Initial Spread Index)", 
+        ylab = "ISI", 
+        col = "lightgreen")
+
+```
+**Análisis de a variable ISI**
+
+* **Histograma:** el histograma tiene una distribución unimodal asimétrica positiva. La mayoría de los valores de ISI se encuentran entre 0 y 20, con un pico claro alrededor de 10, indicando que, generalmente, las condiciones iniciales de propagación del fuego tienden a ser bajas o moderadas, con pocos casos extremos.
+
+* **Boxplot:**  muestra una mediana de 8.4, con la mayoría de los valores entre 0 y 20. Los valores atípicos son principalmente superiores a 20, indicando incendios de propagación rápida, mientras que un valor atípico en 0 podría reflejar condiciones de baja propagación debido a alta humedad o falta de viento. 
+
+
+
+##### **Temperatura en °C**
+
+La variable **temperatura** mide la temperatura del aire en grados Celsius. En nuestro contexto, la temperatura es un factor crucial porque influye directamente en el comportamiento del fuego. Las temperaturas más altas tienden a aumentar la deshidratación de la vegetación, haciendo que sean más propensos a prenderse fuego.
+
+Los valores de la variable temperatura oscilan entre 2.2°C y 33.3°C, con valores más altos generalmente asociándose con mayores riesgos de incendios.
+
+```{r}
+summary(datos$temp)
+```
+
+```{r}
+hist(datos$temp, 
+     main = "Histograma de Temperatura", 
+     xlab = "Temperatura (°C)", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 40)
+
+```
+```{r}
+boxplot(datos$temp, 
+        main = "Boxplot de Temperatura", 
+        ylab = "ISI", 
+        col = "lightgreen")
+
+```
+
+**Análisis de los resultados**
+
+- **Histograma:** La distribución es ligeramente simétrica, con una mayor concentración entre 15°C y 25°C, lo que sugiere que los incendios ocurren en temperaturas moderadas a cálidas, pero no necesariamente en los días más calurosos.
+
+- **Boxplot:** muestra que la mediana está en 19.30°C, con la mayoría de los valores entre 15 y 25°C. Los valores atípicos (outliers) están por debajo de 5°C, lo que podría reflejar condiciones inusuales de temperatura baja en algunas áreas, posiblemente relacionadas con condiciones meteorológicas excepcionales.
+
+##### **RH (humedad relativa)**
+
+La **humedad relativa** (RH) mide el porcentaje de vapor de agua en el aire. En incendios forestales, una baja humedad relativa (aire más seco) aumenta el riesgo de propagación del fuego, mientras que una alta humedad relativa dificulta el encendido y la expansión del fuego. Los valores de RH en este conjunto de datos varían entre 15% y 100%.
+
+
+```{r}
+summary(datos$RH) 
+```
+
+```{r}
+
+hist(datos$RH, 
+     main = "Histograma de Humedad Relativa", 
+     xlab = "Humedad Relativa (%)", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 40)
+
+```
+
+
+```{r}
+
+boxplot(datos$RH, 
+        main = "Boxplot de Humedad Relativa", 
+        ylab = "Humedad Relativa (%)", 
+        col = "lightgreen")
+
+```
+* **Histograma:** muestra que la mayoría de los valores se concentran entre el 20% y el 60%, con picos significativos alrededor del 30% y el 40%. La frecuencia de valores de RH disminuye notablemente tanto por debajo del 20% como por encima del 60%.En general, esto sugiere que en muchas de las condiciones observadas, la humedad del aire está en niveles que podrían permitir la propagación del fuego, aunque no de forma extrema.
+
+* **Boxplot:** el rango intercuartílico (IQR) va aproximadamente del 30% al 60%, con una mediana cercana al 45%. Además, se observan algunos valores atípicos por encima del 80%.
+
+###### **Wind**
+
+La variable **wind** mide la velocidad del viento en km/h. El viento influye en la propagación de los incendios, ya que un viento fuerte puede hacer que el fuego se propague más rápido, mientras que un viento débil ralentiza su expansión. Los valores de wind en nuestro conjunto de datos varían entre 0.4 km/h y 9.4 km/h.
+
+```{r}
+summary(datos$wind)
+```
+
+```{r}
+
+hist(datos$wind, 
+     main = "Histograma de Velocidad del Viento", 
+     xlab = "Velocidad del Viento (km/h)", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 30)
+
+```
+
+```{r}
+
+boxplot(datos$wind, 
+        main = "Boxplot de Velocidad del Viento", 
+        ylab = "Velocidad del Viento (km/h)", 
+        col = "lightgreen")
+
+```
+
+**Análisis de wind**
+
+* **El Histograma** muestra una distribución ligeramente sesgada a la derecha, indicando que la mayoría de las mediciones se concentran en valores más bajos, con algunos casos de vientos más fuertes. La moda se encuentra alrededor de 4 km/h, siendo la velocidad más frecuente registrada en los datos. La dispersión sugiere que la mayoría de los valores oscilan entre 2 km/h y 6 km/h, con una menor frecuencia de velocidades superiores a 8 km/h, esto significa que, aunque la mayoría de los vientos son suaves o moderados, a veces se presentan ráfagas más fuertes, aunque no son muy comunes
+
+
+* **El boxplot** la velocidad del viento está mayormente distribuida entre 3 km/h y 5.5 km/h, con una mediana en 4 km/h. Los bigotes se extienden desde aproximadamente 1 km/h hasta 8 km/h, lo que muestra el rango normal de variabilidad en la velocidad del viento. Observamos varios valores atípicos por encima de 8 km/h, lo que indica que hay episodios ocasionales de viento fuerte.
+
+
+###### **Rain**
+
+La variable **rain** mide la cantidad de lluvia en mm/m². Indica la cantidad de precipitación caída en un área durante un período determinado. En el contexto de los incendios forestales, la lluvia juega un papel crucial, ya que puede disminuir el riesgo de incendios al mojar la vegetación y los combustibles, dificultando su ignición y propagación. Por el contrario, la falta de lluvia contribuye a que la vegetación se seque, lo que aumenta el riesgo de incendios. Los valores de rain en este conjunto de datos varían entre 0.0 mm/m² y 6.4 mm/m².
+
+```{r}
+summary(datos$rain)
+```
+
+```{r}
+# Histograma de la variable Rain (lluvia)
+hist(datos$rain, 
+     main = "Histograma de Lluvia", 
+     xlab = "Cantidad de Lluvia (mm/m²)", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 40)
+
+```
+* **Histograma*:* esta  sesgada hacia valores bajos (casi todos los datos son 0), lo que sugiere que los incendios ocurren mayoritariamente en condiciones secas, con lluvia muy poco frecuente o inexistente. La presencia de un pequeño número de valores no nulos podría reflejar lluvias ocasionales que no son suficientes para mitigar significativamente el riesgo de incendio.
+
+
+Vamos a ver cómo se relacionan nuestras variables mediante un análisis multivariante. 
 
 Primeramente vamos a hacer una matriz de correlaciones para ver cómo de correladas están nuestras variables. 
 
+
 ```{r}
-# seleccionamos solo las variables numéricas de nuestro dataset
-datos_numericos <- datos[, !(names(datos) %in% c("month", "day", "year"))]
+# Matriz de correlación
+numeric_data <- datos[, sapply(datos, is.numeric)]
 
-cor_matrix <- cor(datos_numericos)
+correlation_matrix <- cor(numeric_data)
 
-corrplot(cor_matrix, method = "color", 
-         type = "upper", order = "hclust", 
-         addCoef.col = "black", 
-         tl.col = "black", tl.srt = 45, 
-         diag = FALSE) 
+print(correlation_matrix)
+
+corrplot(correlation_matrix, method = "circle")
 ```
-Podemos ver como muchas de nuestras variables están bastante correladas.
 
--   FFMC tiene bastante correlación positiva con ISI y algo menos con temp, DMC y DC, y algo de correlación negativa con RH
+1. Correlaciones fuertes:
 
--   ISI tiene algo de correlación positiva con temp, DMC y DC
+- DMC y DC tienen una correlación de 0.68, indicando que el contenido de humedad en el suelo está relacionado con la sequedad del terreno.
 
--   temp tiene bastante correlación con DMC y DC, así como mucha correlación negativa con RH
+- FFMC y ISI tienen 0.53, lo que sugiere que ambos índices están relacionados con la propagación del fuego.
 
--   DMC tiene mucha correlación con DC, la más alta de toda la matriz 
+- FFMC y temp tienen 0.43, lo que indica que las temperaturas más altas favorecen condiciones secas para los incendios.
 
--   Por último, X e Y tienen una correlación relativamente alta. 
+2. Correlaciones negativas moderadas:
 
-Una correlación positiva alta quiere decir que si aumenta uno, el otro también lo hará. Lo contrario ocurre para una correlación negativa, en ese caso al aumentar una variable, la otra disminuirá. En nuestro caso, esto solo ocurrirá de manera significativa con la temperatura y RH.
+- temp y RH tienen -0.53, lo que refleja que temperaturas altas están asociadas con baja humedad.
+
+- RH y FFMC tienen -0.30, mostrando que mayor humedad relativa reduce los niveles del índice FFMC.
+
+3. Correlaciones bajas o sin relación clara:
+
+- wind tiene correlaciones bajas con la mayoría de las variables.
+
+- rain tiene correlaciones débiles con área, sugiriendo que la lluvia no afecta significativamente el tamaño del incendio.
+
+4. Con respecto a área:
+
+- Las variables como X y Y muestran correlaciones bajas con área, lo que sugiere que la ubicación no está muy relacionada con el tamaño de los incendios.
+
+- FFMC, DMC y ISI también tienen correlaciones bajas con el área quemada, aunque están relacionadas con otras condiciones que favorecen los incendios.
 
 Podemos ver que hay bastante correlación entre algunas de nuestras variables. Es por ello que más adelante tendremos que hacer una selección de variables. 
 

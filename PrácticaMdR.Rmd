@@ -43,9 +43,9 @@ library(caret)
 library(tidyverse)
 library(knitr) 
 library(corrplot)
-library(gt)
 library(GGally)
 library(car)
+library(performance)
 datos <- read.csv("forestfires.csv", sep=",", header=TRUE)
 ```
 
@@ -87,8 +87,7 @@ Vemos cuantos valores del target (area) son distintos de 0 y cuantos iguales a 0
 table(datos$area>0)
 ```
 
-Primeramente vamos a hacer un análisis univariante:
-#### Estudio por variable:
+Primeramente vamos a hacer un análisis univariante: \#### Estudio por variable:
 
 ##### **Área (variable objetivo):**
 
@@ -643,7 +642,7 @@ plot(modelo_log)
 
 Del resumen del modelo podemos ver como la variable temperatura no es importante en este modelo, además, nuestro R² es muy bajo, lo cual nos dice que nuestro modelo no predice con precisión.
 
-Podemos ver como nuestros residuos no cumplen las condiciones necesarias, no siguen una distribución normal. Aun así vamos a comprobar la normalidad y homocedasticidad
+Podemos ver como nuestros residuos no cumplen las condiciones necesarias, no siguen una distribución normal. Aun así vamos a comprobar la normalidad, independencia y homocedasticidad
 
 ```{r}
 ggplot() +
@@ -800,7 +799,7 @@ lambda3 <- trans3$roundlam
 round(lambda3,1)
 area_trans_2 <- yjPower(df_filtered$area, lambda1)
 ISI_trans_2 <- yjPower(df_filtered$ISI, lambda3)
-modelo_yeo_johnson_3 <- lm(x1_trans ~  ISI_trans_2 )
+modelo_yeo_johnson_3 <- lm(area_trans_2 ~  ISI_trans_2 )
 summary(modelo_yeo_johnson_3)
 plot(modelo_yeo_johnson_3)
 ```
@@ -830,8 +829,30 @@ Aquí vemos como los residuos son bastante similares a una distribución normal
 
 Este modelo podría servirnos. Los residuos están bastante cerca de seguir una distribución normal y de ser homocedásticos, algo que no habíamos conseguido con ningún modelo anterior, ni lineal ni no lineal.
 
-Vamos a comparar nuestros modelos no lineales. Para ello vamos a utilizar distintas métricas como el R² ajustado o el AIC: 
+Vamos a comparar nuestros modelos no lineales. Para ello vamos a utilizar distintas métricas como el R² ajustado o el AIC:
+
+```{r}
+# Create a list of your models
+model_list <- list(
+  modelo_yeo_johnson = modelo_yeo_johnson,
+  modelo_yeo_johnson2 = modelo_yeo_johnson_2,
+  modelo_yeo_johnson3 = modelo_yeo_johnson_3,
+  modelo_log = modelo_log,
+  modelo_log2 = modelo_log_2,
+  modelo_log3 = modelo_log_3,
+  modelo_polinomico = modelo_polinomico
+)
 
 
+comparison_results <- compare_performance(model_list)
+
+# Print the results
+print(comparison_results)
+
+# Visualize the comparison
+plot(comparison_results)
+```
+
+Podemos ver como el modelo con la transformación yeo-johnson eliminando los ceros y utilizando ISI tiene el R² y el R² ajustado más altos, por lo que el ajuste es mejor en este modelo. A pesar de esto, tiene también el valo más alto de RMSE, lo cual nos dice que tiene muchos residuos, en este caso el mejor modelo es el polinómico. En cuanto al AIC y BIC, el peor modelo es el Yeo-Johnson. Teniendo todo esto en cuenta, además del análisis anterior de los residuos de cada uno de los modelos, podemos decir que el modelo con la transformación yeo-johnson eliminando cerosy utilizando la variable ISI es el mejor, al menos en cuanto a la distribución y características de los resíduos y el R², tanto el ajustado como el normal.
 
 ## Conclusiones

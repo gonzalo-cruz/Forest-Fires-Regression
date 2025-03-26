@@ -1,13 +1,47 @@
 ---
-title: "PrácticaModelos"
+title: "Práctica 1 Modelos de Regresión"
 author: "Marc Gil Arnau, Gonzalo Cruz Gómez, Yasmin Ezzarqtouni Marzoug"
 date: "2025-02-20"
-output: html_document
+output: 
+  html_document:
+    theme: flatly
+    toc: yes
+    toc_float:
+      collapsed: true
 ---
 
 ## Índice
 
 ## Introducción
+
+Este trabajo estudia los factores que influyen en el área quemada en el Parque Natural de Montesinho en Portugal . El entendimiento de estos factores es crucial para manejar de manera eficaz las situaciones que pueden dar lugar a incendios, así como aplicar estrategias para mitigarlos. El dataset tiene información detallada de las condiciones climáticas (temperatura, humedad, viento y lluvia), índices de riesgo de incendio del Fire Weather Index (FFMC, DMC, DC, ISI), coordenadas X e Y, además de variables temporales como día y mes. Se trata de una tarea de regresión complicada debido a lo poco balanceada que está la variable objetivo (área), la cual incluye una gran cantidad de ceros. Esta práctica explora varios enfoques de modelado, desde regresiones lineales, tanto simples como múltiples, selección de variables y modelos no lineales para tratar de identficar el modelo óptimo para predecir el área quemada.
+
+## Metodología
+
+Esta práctica aplica el lenguaje de programación R además de varias librerías para analítica de datos y modelado. La metodología del trabajo se estructura de la siguiente manera:
+
+**1. Adquisición de datos, preprocesado y análisis exploratorio de los datos (EDA)**
+
+-   Adquisición de los datos y preprocesado
+-   Análisis univariante
+-   Análisis de la variable objetivo
+-   Análisis multivariante
+
+**2. Modelado**
+
+-   Regresión lineal
+-   Selección de variables y regularización
+-   Regresión no lineal
+
+**3. Comparación de los modelos**
+
+-   Análisis de residuos y visualizaciones de las métricas de rendimiento
+
+**4. Resultados y conclusiones**
+
+-   Se presentan los hallazgos del análisis
+-   Se discuten los resultados
+-   Se destacan las limitaciones del análisis y se estudian los métodos a aplicar a futuro
 
 ## Comprensión del problema
 
@@ -832,7 +866,7 @@ Este modelo podría servirnos. Los residuos están bastante cerca de seguir una 
 Vamos a comparar nuestros modelos no lineales. Para ello vamos a utilizar distintas métricas como el R² ajustado o el AIC:
 
 ```{r}
-# Create a list of your models
+# Creamos una lista con todos los modelos
 model_list <- list(
   modelo_yeo_johnson = modelo_yeo_johnson,
   modelo_yeo_johnson2 = modelo_yeo_johnson_2,
@@ -843,16 +877,11 @@ model_list <- list(
   modelo_polinomico = modelo_polinomico
 )
 
-
 comparison_results <- compare_performance(model_list)
-
-# Print the results
 print(comparison_results)
-
-# Visualize the comparison
 plot(comparison_results)
 ```
 
-Podemos ver como el modelo con la transformación yeo-johnson eliminando los ceros y utilizando ISI tiene el R² y el R² ajustado más altos, por lo que el ajuste es mejor en este modelo. A pesar de esto, tiene también el valo más alto de RMSE, lo cual nos dice que tiene muchos residuos, en este caso el mejor modelo es el polinómico. En cuanto al AIC y BIC, el peor modelo es el Yeo-Johnson. Teniendo todo esto en cuenta, además del análisis anterior de los residuos de cada uno de los modelos, podemos decir que el modelo con la transformación yeo-johnson eliminando cerosy utilizando la variable ISI es el mejor, al menos en cuanto a la distribución y características de los resíduos y el R², tanto el ajustado como el normal.
+Podemos ver como el modelo con la transformación Yeo-Johnson eliminando los ceros y utilizando ISI tiene el R² y el R² ajustado más altos, por lo que el ajuste es mejor en este modelo. A pesar de esto, tiene también el valo más alto de RMSE, lo cual nos dice que tiene muchos residuos, en este caso el mejor modelo es el polinómico. En cuanto al AIC y BIC, el mejor modelo también es el Yeo-Johnson, esto se debe a que nuestra gráfica muestra los pesos derivados del AIC y BIC, no los valores, si fueran los valores, cuanto más bajos mejor, sin embargo en este caso al tratarse de los pesos, cuanto más grandes mejor. Teniendo todo esto en cuenta, además del análisis anterior de los residuos de cada uno de los modelos, podemos decir que el modelo con la transformación yeo-johnson eliminando ceros y utilizando la variable ISI es el mejor, al menos en cuanto a la distribución y características de los resíduos y el R², tanto el ajustado como el normal.
 
 ## Conclusiones

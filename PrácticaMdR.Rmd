@@ -80,6 +80,7 @@ library(corrplot)
 library(GGally)
 library(car)
 library(performance)
+library(splines)
 datos <- read.csv("forestfires.csv", sep=",", header=TRUE)
 ```
 
@@ -663,7 +664,17 @@ plot(modelo_polinomico)
 
 Vemos como eliminar los ceros no nos ayuda, ya que la mayoría de los incendios son pequeños y seguimos sin tener unos residuos normales. El eliminar los ceros hace que la variable temperatura tenga menor importancia aún, con un p valor mayor de 0.05, también aumenta nuestro error residual y disminuye nuesto R², por lo que podemos decir que eliminar todos estos valores hace que nuestro modelo sea peor.
 
-Como hemos podido ver, un modelo polinómico no es mejor que un modelo lineal para nuestros datos, es por ello que vamos a utilizar un modelo logarítmico, sumando 1 a nuestra variable objetivo ya que tenemos ceros en esta y si no, no se podrá hacer el logaritmo. Además, la transformación logarítmica nos ayuda a lidiar con los dos outliers que tenemos, haciendo que influyan menos en el modelo:
+Podemos utilizar splines para intentar, utilizando modelos polinómicos distintos para cada tramo, ajustar mejor nuestro modelo. Para ello dividimos por cuartiles 
+```{r}
+# vamos a dividirlo por cuartiles 
+modelo_spline_bs <- lm(datos$area ~ bs(datos$temp, knots = quantile(datos$temp, c(0.25, 0.5, 0.75))))
+plot(modelo_spline_bs)
+summary(modelo_spline_bs)
+```
+Vemos que hacer splines mejora ligeramente el ajuste de nuestro modelo (nuestro R² ha aumentado ligeramente), aunque sigue sin ser un buen modelo, los residuos no cumplen las condiciones y predice sin precisión alguna. 
+
+
+Como hemos podido ver, un modelo polinómico no es mejor que un modelo lineal para nuestros datos, es por ello que vamos a utilizar un modelo logarítmico, sumando 1 a nuestra variable objetivo ya que tenemos ceros en esta y si no, no existirá el logaritmo. Además, la transformación logarítmica nos ayuda a lidiar con los dos outliers que tenemos, haciendo que influyan menos en el modelo:
 
 ```{r}
 # transformamos nuestra variable objetivo con un logaritmo
@@ -874,14 +885,14 @@ model_list <- list(
   modelo_log = modelo_log,
   modelo_log2 = modelo_log_2,
   modelo_log3 = modelo_log_3,
-  modelo_polinomico = modelo_polinomico
+  modelo_polinomico = modelo_polinomico,
+  modelo_splinebs = modelo_spline_bs
 )
 
 comparison_results <- compare_performance(model_list)
 print(comparison_results)
 plot(comparison_results)
 ```
-
-Podemos ver como el modelo con la transformación Yeo-Johnson eliminando los ceros y utilizando ISI tiene el R² y el R² ajustado más altos, por lo que el ajuste es mejor en este modelo. A pesar de esto, tiene también el valo más alto de RMSE, lo cual nos dice que tiene muchos residuos, en este caso el mejor modelo es el polinómico. En cuanto al AIC y BIC, el mejor modelo también es el Yeo-Johnson, esto se debe a que nuestra gráfica muestra los pesos derivados del AIC y BIC, no los valores, si fueran los valores, cuanto más bajos mejor, sin embargo en este caso al tratarse de los pesos, cuanto más grandes mejor. Teniendo todo esto en cuenta, además del análisis anterior de los residuos de cada uno de los modelos, podemos decir que el modelo con la transformación yeo-johnson eliminando ceros y utilizando la variable ISI es el mejor, al menos en cuanto a la distribución y características de los resíduos y el R², tanto el ajustado como el normal.
+Podemos ver en esta gráfica como el modelo de los splines tiene el R² sin ajustar más alto, aunque en el resto de métricas no es tán bueno y los residuos no cumplen las condiciones necesarias, por lo que tampoco sería un modelo válido. también podemos ver como el modelo con la transformación Yeo-Johnson eliminando los ceros y utilizando ISI tiene el R² ajustado más alto, por lo que el ajuste es mejor en este modelo. A pesar de esto, tiene también el valo más alto de RMSE, lo cual nos dice que tiene muchos residuos, en este caso el mejor modelo es el polinómico. En cuanto al AIC y BIC, el mejor modelo también es el Yeo-Johnson, esto se debe a que nuestra gráfica muestra los pesos derivados del AIC y BIC, no los valores, si fueran los valores, cuanto más bajos mejor, sin embargo en este caso al tratarse de los pesos, cuanto más grandes mejor. Teniendo todo esto en cuenta, además del análisis anterior de los residuos de cada uno de los modelos, podemos decir que el modelo con la transformación yeo-johnson eliminando ceros y utilizando la variable ISI es el mejor, al menos en cuanto a la distribución y características de los resíduos y el R², tanto el ajustado como el normal.
 
 ## Conclusiones

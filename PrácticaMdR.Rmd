@@ -9,6 +9,9 @@ output:
     toc_float:
       collapsed: true
 ---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
 
 ## Índice
 
@@ -31,7 +34,7 @@ Esta práctica aplica el lenguaje de programación R además de varias librería
 
 -   Regresión lineal
 -   Selección de variables y regularización
--   Regresión no lineal
+-   Regresión no lineal y transformación de variables
 
 **3. Comparación de los modelos**
 

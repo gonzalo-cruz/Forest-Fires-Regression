@@ -11,6 +11,7 @@ output: html_document
 
 ## Comprensión del problema
 
+
 **Variables:** 
 
 1. **X** - Coordenada espacial en el eje X dentro del mapa del parque Montesinho: de 1 a 9.
@@ -581,7 +582,300 @@ plot_area_variables(datos_filtrados)
 ```
 Vemos como de nuevo no podemos extraer una relación clara entre nuestras variables y la variable objetivo. Esto significa que cuando apliquemos regresión lineal a nuestra variable objetivo, no obtendremos un modelo que pueda predecir de manera óptima. Es por ello que tendremos que hacer transformaciones de nuestras variables, para poder hacer modelos no lineales que nos ayuden a predecir mejor nuestro target. También de todas estas gráficas, podemos ver los dos incendios grandes de manera clara, ya que el valor del área es mucho más grande en estos dos casos que en los demás. 
 
-## Regresión lineal
+## Modelo de regresión lineal simple
+
+Creación de funciones para evitar repetimiento.
+
+```{r}
+# Gráfico de residuos vs valores ajustados
+grafico_residuos_vs_ajustados <- function(modelo) {
+  residuos <- resid(modelo)
+  valores_ajustados <- fitted(modelo)
+  
+  ggplot(data = NULL, aes(x = valores_ajustados, y = residuos)) +
+    geom_point(color = "blue") +
+    geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+    labs(title = "Residuos vs Valores Ajustados",
+         x = "Valores Ajustados",
+         y = "Residuos") +
+    theme_minimal()
+}
+
+# Histograma de residuos
+grafico_histograma_residuos <- function(modelo) {
+  residuos <- resid(modelo)
+  
+  hist(residuos,
+     main = "Histograma de Residuos",
+     xlab = "Residuos",
+     col = "lightblue", border = "black")
+  
+  invisible(NULL)
+}
+
+# QQ-Plot de residuos
+grafico_qqplot_residuos <- function(modelo) {
+  residuos <- resid(modelo)
+  
+  qqnorm(residuos, main = "QQ-Plot de los Residuos")
+  qqline(residuos, col = "red", lwd = 2)
+}
+
+# Gráfico de residuos vs variable explicativa
+grafico_residuos_vs_variable <- function(modelo, datos, variable_explicativa) {
+  residuos <- resid(modelo)
+  
+  ggplot(data = datos, aes(x = .data[[variable_explicativa]], y = residuos)) +
+    geom_point(color = "purple") +
+    geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+    labs(title = paste("Residuos vs", variable_explicativa),
+         x = variable_explicativa,
+         y = "Residuos") +
+    theme_minimal()
+}
+```
+
+
+```{r}
+# Ajustar el modelo de regresión lineal simple
+modelo_simple <- lm(area ~ temp, data = datos)
+
+# Residuos del modelo
+residuos <- resid(modelo_simple)
+
+# Mostrar resumen del modelo
+summary(modelo_simple)
+```
+
+El análisis de regresión lineal entre la variable objetivo, "area" y la temperatura tiene un $R^2$ extremadamente bajo. Este resultado indica que la temperatura, por sí sola, apenas explica la variabilidad observada en los incendios forestales.
+
+El bajo valor del $R^2$ nos lleva a dos conclusiones: primero, que la relación lineal directa entre temperatura y área afectada es prácticamente inexistente en estos datos, segundo, que serán necesarios enfoques más complejos para modelar adecuadamente este dataset, ya que tal vez la relación no sea lineal sino de otro tipo. 
+
+También es importante considerar que la presencia mayoritaria de incendios inexistentes (valor de cero en la variable "area") esté distorsionando la capacidad predictiva del modelo. En cualquier caso, estos resultados sugieren la necesidad de explorar alternativas.
+
+
+Debido a estos resultados, para determinar qué variables meteorológicas de forma aislada tienen mayor influencia en el área quemada por los incendios forestales, vamos a calcular para cada caso el $R^2$ que nos indica el porcentaje de variabilidad explicada.
+
+```{r}
+# Lista de variables
+variables <- c("temp", "RH", "wind", "FFMC", "DMC", "DC", "ISI", "rain")
+
+# Bucle para calcular R² de cada modelo
+for (var in variables) {
+  modelo <- lm(paste("area ~", var), data = datos)
+  r2 <- summary(modelo)$r.squared
+  cat("El modelo con", var, "tiene un R² de:", round(r2, 4), "\n")
+}
+```
+
+Los resultados indican que todos los modelos individuales presentan valores de $R^2$ muy bajos. Esto confirma que ninguna de las variables meteorológicas analizadas de forma aislada tiene capacidad para explicar las variaciones en los incendios forestales. Y podemos concluir que un modelo multivariable de los fenómenos de incendios puede ser más determinante que la influencia individual.
+
+A pesar de los valores bajos del $R^2$ que no resultan significativas para un modelo, hemos seleccionado como ejemplo el modelo basado en la temperatura. Esta elección se debe por ser un parámetro meteorológico fácilmente comprensible.
+
+#### Gráfico de residuos vs valores ajustados
+
+```{r}
+print(grafico_residuos_vs_ajustados(modelo_simple))
+```
+
+El gráfico de "Residuos vs Valores Ajustados" ayuda a identificar si la relación entre la variable explicativa y la variable respuesta es lineal y si se cumple la homocedasticidad. En este caso, se observa que los residuos no se distribuyen aleatoriamente alrededor del cero, lo que sugiere que el modelo no captura adecuadamente la relación entre las variables podría no ser lineal, indicando la posible necesidad de incorporar términos no lineales o transformaciones de variables al modelo.
+
+La dispersión de los residuos presenta heterogeneidad donde la varianza de los errores no se mantiene constante, sino que parece incrementarse levemente para predicciones mayores. Además, se identifican varios puntos alejados del grupo principal que podrían corresponder a observaciones atípicas.
+
+####  Histograma de residuos
+
+```{r}
+print(grafico_histograma_residuos(modelo_simple))
+```
+
+El histograma de residuos muestra la distribución de los residuos. En este caso, se observa una gran concentración de residuos cerca de cero, pero hay algunos valores atípicos que no se ajustan bien como se ha comentado anteriormente. El gráfico sugiere que las variables no siguen una distribución normal.
+
+#### QQ-Plot de residuos
+
+```{r}
+print(grafico_qqplot_residuos(modelo_simple))
+```
+
+El "QQ-Plot" compara la distribución de los residuos con una distribución normal. Si los puntos se alinean con la línea diagonal, los residuos siguen una distribución normal. En este caso, se observa que los residuos no siguen una distribución normal en la cola derecha.
+
+#### Gráfico de residuos vs temperatura
+
+```{r}
+print(grafico_residuos_vs_variable(modelo_simple, datos, "temp"))
+```
+
+Este gráfico muestra los residuos frente a la variable explicativa, "temp". Si hay un patrón claro en los residuos, esto sugiere que el modelo no está capturando adecuadamente la relación entre las variables.
+
+En este caso muestra una distribución no aleatoria de los residuos que se agrupan principalmente en la zona inferior del gráfico con una marcada dispersión que aumenta conforme lo hacen los valores de temperatura junto con la presencia de varios valores atípicos significativos Esta disposición evidencia problemas de heterocedasticidad donde la variabilidad de los residuos no es constante.
+
+#### Prueba de Breusch-Pagan para homocedasticidad
+
+```{r}
+breusch_pagan <- bptest(modelo_simple)
+print(breusch_pagan)
+```
+
+La prueba de Breusch-Pagan evalúa si la varianza de los residuos es constante, es decir si hay homocedasticidad. Un p-valor menor a 0.05 sugiere heterocedasticidad. En este caso, el p-valor es mayor a 0.05 lo que sugiere homocedasticidad. Sin embargo, esta conclusión contradice las conclusiones anteriores.  
+
+Esta contradicción puede explicarse por las limitaciones que presenta test de breusch-pagan cuando se trata con distribuciones asimétricas o en presencia de valores atípicos, condiciones presentes en nuestro análisis. Además, el test puede no detectar irregularidades que desde un punto de vista práctico son relevantes para la calidad del modelo.
+
+Por lo que tomamos este valor con pinzas por lo comentado y porque no creemos que el p-valor sea lo suficientemente alto para que sea verdaramente decisivo a la hora de decidir que el modelo es homocedastico.
+
+#### Prueba de Shapiro-Wilk para normalidad de los residuos
+
+```{r}
+shapiro_test <- shapiro.test(residuos)
+print(shapiro_test)
+```
+
+La prueba de Shapiro-Wilk evalúa si los residuos siguen una distribución normal. Un p-valor menor a 0.05 sugiere que los residuos no son normales. En este caso, el p-valor es menor a  0.05 lo que confirma las conclusiones que hemos podido sacar de los gráficos.
+
+#### Prueba de Durbin-Watson para autocorrelación de los residuos
+
+```{r}
+durbin_watson <- dwtest(modelo_simple)
+print(durbin_watson)
+```
+
+La prueba de Durbin-Watson evalúa si los residuos están autocorrelacionados. Un valor cercano a 2 sugiere que no hay autocorrelación. En este caso, el estadístico es menor a 0.05 lo que sugiere autocorrelación.
+
+
+Como se ha comentado, la abundancia de ceros pueden estar ocultando relaciones entre las variables y la extensión de los incendios. Para verificar este efecto, vamos a realizar un modelo que excluya estos casos, lo que nos permitirá evaluar cómo los efectos meteorológicos afectan el tamaño de los incendios cuando estos ocurren. 
+
+### Repetir el proceso para el modelo sin ceros en "area"
+
+```{r}
+# Filtrar datos sin ceros en "area"
+datos2 <- datos[datos$area > 0, ]
+
+# Ajustar el modelo de regresión lineal simple sin ceros
+modelo_simple2 <- lm(area ~ temp, data = datos2)
+
+# Residuos del modelo
+residuos2 <- resid(modelo_simple2)
+
+# Mostrar resumen del segundo modelo
+summary(modelo_simple2)
+```
+
+Observamos que el valor del $R^2$ entre la variable "area" y la temperatura ha  mejorado ligeramente en comparación con los modelos que incluían todos los datos. Sin embargo, esta mejora del valor sigue siendo extremadamente bajo, por lo que vamos volver a calcular para cada caso el $R2$ y compararlos
+
+```{r}
+# Bucle para calcular R**2 de cada modelo
+for (var in variables) {
+  modelo2 <- lm(paste("area ~", var), data = datos2)
+  r2 <- summary(modelo2)$r.squared                   
+  cat("El modelo con", var, "tiene un R² de:", round(r2, 4), "\n")
+}
+```
+
+Incluso tras quitar las observaciones con área cero, los $R^2$ siguen siendo extremadamente bajos, confirmando que ningún predictor individual explica significativamente la variación de los incendios. 
+
+Aunque los resultados no son significativos, vamos a revisar el modelo entre "area" y la temperatura por si los supuestos se cumplen o por lo menos tienen una mejora significativa.
+
+#### Gráfico de residuos vs valores ajustados sin ceros
+
+```{r}
+print(grafico_residuos_vs_ajustados(modelo_simple2))
+```
+
+Los residuos siguen sin distribuirse de forma aleatoriamente alrededor del cero por lo que el modelo no captura adecuadamente la relación entre la variable explicativa y la variable respuesta.
+
+####  Histograma de residuos sin ceros
+
+```{r}
+print(grafico_histograma_residuos(modelo_simple2))
+```
+
+El análisis del histograma de residuos tras eliminar las observaciones con área cero revela una ligera mejora en la distribución,, pero sigue teniendo problemas de normalidad. 
+
+#### QQ-Plot de residuos sin ceros
+
+```{r}
+print(grafico_qqplot_residuos(modelo_simple2))
+```
+
+En este caso, se observa que los residuos no siguen una distribución normal, especialmente en la cola derecha. Esto coincide con lo observado en el histograma de residuos y refuerzan las limitaciones del enfoque de regresión lineal.
+
+#### Gráfico de residuos vs temperatura sin ceros
+
+```{r}
+print(grafico_residuos_vs_variable(modelo_simple2, datos2, "temp"))
+```
+
+Los residuos siguen agrupados en la zona inferior del gráfico evidenciando problemas de heterocedasticidad. La persistencia de estos problemas tras eliminar los ceros sugiere que las limitaciones del modelo van más allá de la distribución inicial de los datos.
+
+
+Los modelos lineales simples no son los indicados para intentar predecir el area de un incendio, este hecho era algo previsible ya que los incendios son fenómenos meteorológicos complejos que dependen de muchos factores. Para intentar mejorar la predicción vamos a implementar un modelo de regresión lineal múltiple.
+
+## Modelo de regresión lineal múltiple
+
+```{r}
+# Ajuste del modelo completo
+modelo_multiple <- lm(area ~ temp + RH + wind + FFMC + DMC + DC + ISI + rain, data = datos)
+
+# Obtener los residuos
+residuos_multiple <- resid(modelo_completo)
+
+# Resumen estadístico
+summary(modelo_multiple)
+```
+
+
+
+#### Gráfico de residuos vs valores ajustados 
+
+```{r}
+print(grafico_residuos_vs_ajustados(modelo_multiple))
+```
+
+En el gráfico de "Residuos vs Valores Ajustados" se observa que tal y como ocurria en el modelo lineal los residuos no se distribuyen aleatoriamente alrededor del cero y la dispersión de los residuos es heterogenia con una varianza que se incrementa a medida que los valores ajustados aumentan. 
+
+####  Histograma de residuos
+
+```{r}
+print(grafico_histograma_residuos(modelo_multiple))
+```
+
+#### QQ-Plot de residuos
+
+```{r}
+print(grafico_qqplot_residuos(modelo_multiple))
+```
+
+Al histograma de residuos y al El "QQ-Plot" les ocurre lo mismo que al modelo simple, al primero gran concentración de residuos cerca del cero y con presencia de valores atípicos, en el segundo los residuos no siguen una distribución normal en la cola derecha. Ambos sugieren que no se sigue una distribución normal.
+
+#### Prueba de Breusch-Pagan para homocedasticidad
+
+```{r}
+breusch_pagan <- bptest(modelo_multiple)
+print(breusch_pagan)
+```
+
+El p-valor es mayor a 0.05 al igual que en el modelo lineal simple lo que sugiere homocedasticidad. Sin embargo, esta conclusión contradice las conclusiones anteriores. La gran diferencia en este caso es que esta vez el p-valor es diez veces mayor al anterior, por lo tanto es mucho mayor a 0.05.
+Pero como se ha comentado este test no es especialmente bueno cuando trata con distribuciones asimétricas o en presencia de valores atípicos. Por lo que este valor no es determinante frente a las suposiciones sacadas de los gráficos.
+
+#### Prueba de Shapiro-Wilk para normalidad de los residuos
+
+```{r}
+shapiro_test <- shapiro.test(residuos_multiple)
+print(shapiro_test)
+```
+
+Con la prueba de Shapiro-Wilk comprobamos que el p-valor es menor a  0.05 lo que confirma las conclusiones que hemos podido sacar de los gráficos de que el modelo no sigue una distribución normal.
+
+#### Prueba de Durbin-Watson para autocorrelación de los residuos
+
+```{r}
+durbin_watson <- dwtest(modelo_multiple)
+print(durbin_watson)
+```
+
+El p-valor de la prueba de Durbin-Watson es menor a 0.05, por lo tanto los residuos del modelo son autocorrelados.
+
+
+Hemos podido comprobar que al igual que pasaba con el modelo de regresión lineal simple, el modelo lineal múltiple no cumplen los supuestos. Esto nos está indicando que un modelo lineal no es el indicado para nuestro caso, por lo tanto lo tendremos que obtar por o bien seleccionar y transformar las variables o intentar aplicar modelos no lineales.
+
 
 ## Selección de variables y regularización
 

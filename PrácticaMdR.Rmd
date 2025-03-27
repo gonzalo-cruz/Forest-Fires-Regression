@@ -425,7 +425,7 @@ boxplot(datos$RH,
 
 -   **Boxplot:** el rango intercuartílico (IQR) va aproximadamente del 30% al 60%, con una mediana cercana al 45%. Además, se observan algunos valores atípicos por encima del 80%.
 
-###### **Wind**
+##### **Wind**
 
 La variable **wind** mide la velocidad del viento en km/h. El viento influye en la propagación de los incendios, ya que un viento fuerte puede hacer que el fuego se propague más rápido, mientras que un viento débil ralentiza su expansión. Los valores de wind en nuestro conjunto de datos varían entre 0.4 km/h y 9.4 km/h.
 
@@ -459,7 +459,7 @@ boxplot(datos$wind,
 
 -   **El boxplot** la velocidad del viento está mayormente distribuida entre 3 km/h y 5.5 km/h, con una mediana en 4 km/h. Los bigotes se extienden desde aproximadamente 1 km/h hasta 8 km/h, lo que muestra el rango normal de variabilidad en la velocidad del viento. Observamos varios valores atípicos por encima de 8 km/h, lo que indica que hay episodios ocasionales de viento fuerte.
 
-###### **Rain**
+##### **Rain**
 
 La variable **rain** mide la cantidad de lluvia en mm/m². Indica la cantidad de precipitación caída en un área durante un período determinado. En el contexto de los incendios forestales, la lluvia juega un papel crucial, ya que puede disminuir el riesgo de incendios al mojar la vegetación y los combustibles, dificultando su ignición y propagación. Por el contrario, la falta de lluvia contribuye a que la vegetación se seque, lo que aumenta el riesgo de incendios. Los valores de rain en este conjunto de datos varían entre 0.0 mm/m² y 6.4 mm/m².
 
@@ -714,7 +714,7 @@ Los resultados indican que todos los modelos individuales presentan valores de $
 
 A pesar de los valores bajos del $R^2$ que no resultan significativas para un modelo, hemos seleccionado como ejemplo el modelo basado en la temperatura. Esta elección se debe por ser un parámetro meteorológico fácilmente comprensible.
 
-#### Gráfico de residuos vs valores ajustados
+#### **Gráfico de residuos vs valores ajustados**
 
 ```{r}
 print(grafico_residuos_vs_ajustados(modelo_simple))
@@ -724,7 +724,7 @@ El gráfico de "Residuos vs Valores Ajustados" ayuda a identificar si la relaci�
 
 La dispersión de los residuos presenta heterogeneidad donde la varianza de los errores no se mantiene constante, sino que parece incrementarse levemente para predicciones mayores. Además, se identifican varios puntos alejados del grupo principal que podrían corresponder a observaciones atípicas.
 
-####  Histograma de residuos
+####  **Histograma de residuos**
 
 ```{r}
 print(grafico_histograma_residuos(modelo_simple))
@@ -732,7 +732,7 @@ print(grafico_histograma_residuos(modelo_simple))
 
 El histograma de residuos muestra la distribución de los residuos. En este caso, se observa una gran concentración de residuos cerca de cero, pero hay algunos valores atípicos que no se ajustan bien como se ha comentado anteriormente. El gráfico sugiere que las variables no siguen una distribución normal.
 
-#### QQ-Plot de residuos
+#### **QQ-Plot de residuos**
 
 ```{r}
 print(grafico_qqplot_residuos(modelo_simple))
@@ -740,7 +740,7 @@ print(grafico_qqplot_residuos(modelo_simple))
 
 El "QQ-Plot" compara la distribución de los residuos con una distribución normal. Si los puntos se alinean con la línea diagonal, los residuos siguen una distribución normal. En este caso, se observa que los residuos no siguen una distribución normal en la cola derecha.
 
-#### Gráfico de residuos vs temperatura
+#### **Gráfico de residuos vs temperatura**
 
 ```{r}
 print(grafico_residuos_vs_variable(modelo_simple, datos, "temp"))
@@ -750,7 +750,7 @@ Este gráfico muestra los residuos frente a la variable explicativa, "temp". Si 
 
 En este caso muestra una distribución no aleatoria de los residuos que se agrupan principalmente en la zona inferior del gráfico con una marcada dispersión que aumenta conforme lo hacen los valores de temperatura junto con la presencia de varios valores atípicos significativos Esta disposición evidencia problemas de heterocedasticidad donde la variabilidad de los residuos no es constante.
 
-#### Prueba de Breusch-Pagan para homocedasticidad
+#### **Prueba de Breusch-Pagan para homocedasticidad**
 
 ```{r}
 breusch_pagan <- bptest(modelo_simple)
@@ -763,7 +763,7 @@ Esta contradicción puede explicarse por las limitaciones que presenta test de b
 
 Por lo que tomamos este valor con pinzas por lo comentado y porque no creemos que el p-valor sea lo suficientemente alto para que sea verdaramente decisivo a la hora de decidir que el modelo es homocedastico.
 
-#### Prueba de Shapiro-Wilk para normalidad de los residuos
+#### **Prueba de Shapiro-Wilk para normalidad de los residuos**
 
 ```{r}
 shapiro_test <- shapiro.test(residuos)
@@ -772,7 +772,7 @@ print(shapiro_test)
 
 La prueba de Shapiro-Wilk evalúa si los residuos siguen una distribución normal. Un p-valor menor a 0.05 sugiere que los residuos no son normales. En este caso, el p-valor es menor a  0.05 lo que confirma las conclusiones que hemos podido sacar de los gráficos.
 
-#### Prueba de Durbin-Watson para autocorrelación de los residuos
+#### **Prueba de Durbin-Watson para autocorrelación de los residuos**
 
 ```{r}
 durbin_watson <- dwtest(modelo_simple)
@@ -784,7 +784,7 @@ La prueba de Durbin-Watson evalúa si los residuos están autocorrelacionados. U
 
 Como se ha comentado, la abundancia de ceros pueden estar ocultando relaciones entre las variables y la extensión de los incendios. Para verificar este efecto, vamos a realizar un modelo que excluya estos casos, lo que nos permitirá evaluar cómo los efectos meteorológicos afectan el tamaño de los incendios cuando estos ocurren. 
 
-### Repetir el proceso para el modelo sin ceros en "area"
+### **Repetir el proceso para el modelo sin ceros en "area"**
 
 ```{r}
 # Filtrar datos sin ceros en "area"
@@ -815,7 +815,7 @@ Incluso tras quitar las observaciones con área cero, los $R^2$ siguen siendo ex
 
 Aunque los resultados no son significativos, vamos a revisar el modelo entre "area" y la temperatura por si los supuestos se cumplen o por lo menos tienen una mejora significativa.
 
-#### Gráfico de residuos vs valores ajustados sin ceros
+#### **Gráfico de residuos vs valores ajustados sin ceros**
 
 ```{r}
 print(grafico_residuos_vs_ajustados(modelo_simple2))
@@ -823,7 +823,7 @@ print(grafico_residuos_vs_ajustados(modelo_simple2))
 
 Los residuos siguen sin distribuirse de forma aleatoriamente alrededor del cero por lo que el modelo no captura adecuadamente la relación entre la variable explicativa y la variable respuesta.
 
-####  Histograma de residuos sin ceros
+#### **Histograma de residuos sin ceros**
 
 ```{r}
 print(grafico_histograma_residuos(modelo_simple2))
@@ -831,7 +831,7 @@ print(grafico_histograma_residuos(modelo_simple2))
 
 El análisis del histograma de residuos tras eliminar las observaciones con área cero revela una ligera mejora en la distribución,, pero sigue teniendo problemas de normalidad. 
 
-#### QQ-Plot de residuos sin ceros
+#### **QQ-Plot de residuos sin ceros**
 
 ```{r}
 print(grafico_qqplot_residuos(modelo_simple2))
@@ -839,7 +839,7 @@ print(grafico_qqplot_residuos(modelo_simple2))
 
 En este caso, se observa que los residuos no siguen una distribución normal, especialmente en la cola derecha. Esto coincide con lo observado en el histograma de residuos y refuerzan las limitaciones del enfoque de regresión lineal.
 
-#### Gráfico de residuos vs temperatura sin ceros
+#### **Gráfico de residuos vs temperatura sin ceros**
 
 ```{r}
 print(grafico_residuos_vs_variable(modelo_simple2, datos2, "temp"))
@@ -865,7 +865,7 @@ summary(modelo_multiple)
 
 
 
-#### Gráfico de residuos vs valores ajustados 
+#### **Gráfico de residuos vs valores ajustados **
 
 ```{r}
 print(grafico_residuos_vs_ajustados(modelo_multiple))
@@ -873,13 +873,13 @@ print(grafico_residuos_vs_ajustados(modelo_multiple))
 
 En el gráfico de "Residuos vs Valores Ajustados" se observa que tal y como ocurria en el modelo lineal los residuos no se distribuyen aleatoriamente alrededor del cero y la dispersión de los residuos es heterogenia con una varianza que se incrementa a medida que los valores ajustados aumentan. 
 
-####  Histograma de residuos
+#### **Histograma de residuos**
 
 ```{r}
 print(grafico_histograma_residuos(modelo_multiple))
 ```
 
-#### QQ-Plot de residuos
+#### **QQ-Plot de residuos**
 
 ```{r}
 print(grafico_qqplot_residuos(modelo_multiple))
@@ -887,7 +887,7 @@ print(grafico_qqplot_residuos(modelo_multiple))
 
 Al histograma de residuos y al El "QQ-Plot" les ocurre lo mismo que al modelo simple, al primero gran concentración de residuos cerca del cero y con presencia de valores atípicos, en el segundo los residuos no siguen una distribución normal en la cola derecha. Ambos sugieren que no se sigue una distribución normal.
 
-#### Prueba de Breusch-Pagan para homocedasticidad
+#### **Prueba de Breusch-Pagan para homocedasticidad**
 
 ```{r}
 breusch_pagan <- bptest(modelo_multiple)
@@ -897,7 +897,7 @@ print(breusch_pagan)
 El p-valor es mayor a 0.05 al igual que en el modelo lineal simple lo que sugiere homocedasticidad. Sin embargo, esta conclusión contradice las conclusiones anteriores. La gran diferencia en este caso es que esta vez el p-valor es diez veces mayor al anterior, por lo tanto es mucho mayor a 0.05.
 Pero como se ha comentado este test no es especialmente bueno cuando trata con distribuciones asimétricas o en presencia de valores atípicos. Por lo que este valor no es determinante frente a las suposiciones sacadas de los gráficos.
 
-#### Prueba de Shapiro-Wilk para normalidad de los residuos
+#### **Prueba de Shapiro-Wilk para normalidad de los residuos**
 
 ```{r}
 shapiro_test <- shapiro.test(residuos_multiple)
@@ -906,7 +906,7 @@ print(shapiro_test)
 
 Con la prueba de Shapiro-Wilk comprobamos que el p-valor es menor a  0.05 lo que confirma las conclusiones que hemos podido sacar de los gráficos de que el modelo no sigue una distribución normal.
 
-#### Prueba de Durbin-Watson para autocorrelación de los residuos
+#### **Prueba de Durbin-Watson para autocorrelación de los residuos**
 
 ```{r}
 durbin_watson <- dwtest(modelo_multiple)

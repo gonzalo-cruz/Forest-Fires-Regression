@@ -1050,7 +1050,7 @@ summary(modelo_mejorado)
 En este modelo mejorado, las variables adicionales (interacciones, transformaciones y logaritmos) no nos muestran una mejora significativa en la capacidad predictiva del modelo. Los p valores para todas las variables (incluidas X, DMC, RH, X_DMC_interaction, RH_squared, y log_X) son todos mayores que 0.05, lo que indica que no hay evidencia suficiente para concluir que estas variables tengan un efecto significativo en la variable dependiente area.
 
 
-### **Ridge regression**
+### **Regresión Ridge**
 
 La regresión Ridge introduce una penalización en la estimación de los coeficientes de regresión, lo que ayuda a reducir la varianza del modelo y mejora su capacidad predictiva en presencia de datos altamente correlacionados o con muchas variables.
 
@@ -1112,7 +1112,7 @@ output
   - Temperatura (temp), humedad relativa (RH), viento (wind) y lluvia (rain): los coeficientes de estas variables también han sido reducidos en la regresión Ridge. Por ejemplo, la temperatura tiene un coeficiente de 0.090 en Ridge comparado con 1.296 en OLS. Esto sugiere que el modelo Ridge está tratando de evitar que la temperatura influya demasiado en el modelo, a pesar de que en la regresión OLS tenía un coeficiente bastante alto.
   
 
-### Refresión Lasso
+### **Regresión Lasso**
 
 Cuando se tiene un conjunto de predictores con posibles redundancias o ruido, Lasso permite identificar cuáles son las variables más relevantes para el modelo, lo que facilita la interpretación y reduce la complejidad del análisis.
 
@@ -1155,7 +1155,7 @@ Al comparar los coeficientes de la regresión Lasso vs. Ridge vs. OL obtenemos l
 Conclusión: mientras que Ridge reduce los coeficientes de las variables pero las mantiene en el modelo, Lasso las elimina por completo, dejando un modelo más esquelético con menos variables y, por ende, más fácil de interpretar.
 
 
-## **Elastic Net**
+### **Elastic Net**
 
 La regresión Elastic Net es una técnica de regularización que combina las propiedades de Ridge y Lasso, abordando algunas de sus limitaciones individuales.
 

@@ -402,14 +402,12 @@ summary(datos$RH)
 ```
 
 ```{r}
-
 hist(datos$RH, 
      main = "Histograma de Humedad Relativa", 
      xlab = "Humedad Relativa (%)", 
      col = "steelblue", 
      border = "black", 
      breaks = 40)
-
 ```
 
 ```{r}
@@ -487,14 +485,26 @@ Vamos a ver cómo se relacionan nuestras variables mediante un análisis multiva
 Primeramente vamos a hacer una matriz de correlaciones para ver cómo de correladas están nuestras variables.
 
 ```{r}
-# Matriz de correlación
-numeric_data <- datos[, sapply(datos, is.numeric)]
+# Transformamos las variables categóricas (month y day) a numéricas
+datos_transformados <- datos %>%
+  mutate(
+    month = as.numeric(factor(month)),  
+    day = as.numeric(factor(day))       
+  )
 
+
+numeric_data <- datos_transformados
+
+# Calculamos la matriz de correlación
 correlation_matrix <- cor(numeric_data)
 
-print(correlation_matrix)
-
-corrplot(correlation_matrix, method = "circle")
+# Grafica de la matriz de correlación 
+corrplot(correlation_matrix, method = "color", 
+         col = colorRampPalette(c("blue", "white", "red"))(200),  
+         type = "full", 
+         addCoef.col = "black",  
+         number.cex = 0.7,  
+         diag = FALSE) 
 ```
 
 1.  Correlaciones fuertes:
@@ -517,13 +527,29 @@ corrplot(correlation_matrix, method = "circle")
 
 -   rain tiene correlaciones débiles con área, sugiriendo que la lluvia no afecta significativamente el tamaño del incendio.
 
-4.  Con respecto a área:
+4. Con respecto a área:
 
--   Las variables como X y Y muestran correlaciones bajas con área, lo que sugiere que la ubicación no está muy relacionada con el tamaño de los incendios.
+- month: al convertir month (mes) en una variable numérica, obtenemos una correlación muy débil y positiva con area, lo que indica que no hay una relación clara entre el mes y el área quemada. Puede que haya algún patrón temporal, pero no es algo fuerte ni evidente.
 
--   FFMC, DMC y ISI también tienen correlaciones bajas con el área quemada, aunque están relacionadas con otras condiciones que favorecen los incendios.
+- day: al igual que con month, day también tiene una correlación débil con area. Esto sugiere que el día de la semana no tiene un impacto importante en el área quemada, aunque pueda haber algo de variabilidad.
 
-Podemos ver que hay bastante correlación entre algunas de nuestras variables. Es por ello que más adelante tendremos que hacer una selección de variables.
+- X e Y: las coordenadas X y Y tienen correlaciones débiles y positivas con area (0.063 y 0.045, respectivamente). Esto indica que, aunque haya una ligera relación, el lugar geográfico de los incendios no está fuertemente vinculado con el área quemada. 
+
+- FFMC (Fine Fuel Moisture Code): con una correlación de 0.040 con area, esto significa que la humedad en los combustibles finos tiene una relación casi nula con el área quemada. No parece haber una gran influencia de este índice en el tamaño del incendio.
+
+- DMC (Duff Moisture Code): la correlación de 0.073 muestra que el contenido de humedad en los materiales orgánicos en el suelo tiene una ligera relación positiva con el área quemada. A medida que aumenta el DMC, el área quemada podría aumentar ligeramente, aunque la relación es débil.
+
+- DC (Drought Code): la correlación de 0.05 indica que el índice de sequedad tiene una relación muy débil y positiva con area. Aunque más sequedad en el terreno podría facilitar la propagación del fuego, la relación no es lo suficientemente fuerte como para ser determinante.
+
+- ISI (Initial Spread Index): la correlación de 0.008 con area es prácticamente nula, lo que significa que el índice de propagación inicial no tiene ninguna relación significativa con el área quemada en este caso.
+
+- temp (Temperatura): la correlación de 0.1 es positiva y débil, lo que sugiere que a medida que aumenta la temperatura, el área quemada también tiende a aumentar, aunque de forma pequeña. Esto es lógico, ya que el calor favorece la propagación del fuego.
+
+- RH (Relative Humidity - Humedad relativa): la correlación de -0.08 indica que a medida que la humedad relativa aumenta, el área quemada tiende a disminuir un poco, pero la relación es débil. Esto podría sugerir que la humedad más alta dificulta la propagación del fuego, aunque no de manera drástica.
+
+- rain: la correlación con area es -0.007, lo que significa que no hay casi ninguna relación entre la cantidad de lluvia y el área quemada. Es decir, las variaciones en la lluvia no parecen tener un efecto significativo en el área afectada por el fuego.
+
+
 
 Si hacemos un pairs plot, podremos ver claramente cómo están relacionadas dichas variables:
 
@@ -970,6 +996,199 @@ Es evidente que necesitamos intentar enfoques más flexibles que puedan adaptars
 
 ## Selección de variables y regularización
 
+Vamos a realizar una selección automática de variables utilizando el método de stepwise regression.
+
+```{r}
+# Modelo completo con todas las variables
+modelo_completo <- lm(area ~ ., data = datos)
+
+# Resumen del modelo completo
+summary(modelo_completo)
+```
+El modelo completo con todas las variables no parece ser adecuado para predecir el área quemada. Muchas de las variables no son significativas, y el modelo en general tiene un ajuste muy pobre (bajo R-cuadrado y un alto error estándar residual)
+
+```{r}
+# Selección de características con stepwise
+modelo_stepwise <- step(modelo_completo, direction = "both")
+```
+El proceso de selección de características mediante el método stepwise ha logrado simplificar el modelo inicial, eliminando las variables menos relevantes y conservando aquellas que tienen un mayor impacto en la predicción del área afectada por los incendios. El modelo final, con un AIC de 4292.6, es más eficiente y menos complejo que el modelo original, lo que nos indica que las variables seleccionadas (X, DMC, ISI, RH) son las más importantes para explicar la variabilidad del área quemada. 
+
+
+```{r}
+# Resumen del modelo final
+summary(modelo_stepwise)
+```
+
+El modelo final, que incluye las variables X (coordenada X), DMC (Duff Moisture Code) y RH (Relative Humidity), muestra que RH es la única variable estadísticamente significativa (p-valor = 0.0462), lo que nos indica que la humedad relativa tiene un impacto importante en el área afectada por los incendios. La variable X y DMC no alcanzan un nivel de significancia fuerte, aunque DMC muestra una tendencia cercana (p-valor = 0.0592).
+
+El modelo explica una pequeña proporción de la variabilidad en el área afectada, con un R-cuadrado ajustado de 0.01172, lo que indica que hay muchos otros factores no capturados por el modelo que podrían influir en el área de los incendios. 
+
+#### **Evaluación del modelo con nuevas características**
+
+```{r}
+datos$X_DMC_interaction <- datos$X * datos$DMC  # Interacción entre X y DMC
+datos$RH_squared <- datos$RH^2  # Cuadrado de RH
+datos$log_X <- log(datos$X + 1)  # Logaritmo de X 
+
+# Modelo sin ingeniería de características (solo con variables originales)
+modelo_basico <- lm(area ~ X + DMC + RH, data = datos)
+
+# Modelo con nuevas características
+modelo_mejorado <- lm(area ~ X + DMC + RH + X_DMC_interaction + RH_squared + log_X, data = datos)
+
+summary(modelo_basico)
+```
+
+El modelo básico muestra que solo RH tiene un impacto estadísticamente significativo sobre la variable dependiente, mientras que X y DMC no lo son de manera concluyente. Además, el bajo R-cuadrado sugiere que el modelo tiene una capacidad limitada para explicar la variabilidad en los datos, lo que indica que podrían ser necesarias más variables o ajustes para mejorar la predicción.
+
+```{r}
+summary(modelo_mejorado)
+```
+
+En este modelo mejorado, las variables adicionales (interacciones, transformaciones y logaritmos) no nos muestran una mejora significativa en la capacidad predictiva del modelo. Los p valores para todas las variables (incluidas X, DMC, RH, X_DMC_interaction, RH_squared, y log_X) son todos mayores que 0.05, lo que indica que no hay evidencia suficiente para concluir que estas variables tengan un efecto significativo en la variable dependiente area.
+
+
+### **Ridge regression**
+
+La regresión Ridge introduce una penalización en la estimación de los coeficientes de regresión, lo que ayuda a reducir la varianza del modelo y mejora su capacidad predictiva en presencia de datos altamente correlacionados o con muchas variables.
+
+
+```{r}
+#Semilla
+set.seed(123)
+datos$month <- as.factor(datos$month)
+datos$day <- as.factor(datos$day)
+
+# Eliminamos las filas con NA
+datos_clean <- datos %>% na.omit()
+
+X <- model.matrix(area ~ . -1, data = datos_clean)
+Y <- datos_clean$area
+
+# Ajustamos modelo Ridge 
+modelo_ridge <- glmnet(X, Y, alpha = 0)
+
+# Obtenemos el lambda óptimo por validación cruzada
+cv_ridge <- cv.glmnet(X, Y, alpha = 0)
+lambda_optimo <- cv_ridge$lambda.min
+cat("Lambda óptimo:", lambda_optimo, "\n")
+
+# Modelo final con el lambda óptimo
+modelo_ridge_final <- glmnet(X, Y, alpha = 0, lambda = lambda_optimo)
+```
+
+```{r}
+# Ajustamos modelo final con lambda óptimo
+modelo_ridge_final <- glmnet(X, Y, alpha = 0, lambda = lambda_optimo)
+
+modelo_ridge_final
+```
+
+```{r}
+modelo_lm <- lm(Y~X)
+
+# Coeficientes
+output=cbind(round(coef(modelo_ridge_final),3),
+            round(coef(modelo_lm),3))
+
+colnames(output)=c("RIDGE","OLS")
+
+output
+```
+**Análisis de los resultados** 
+
+- Lambda óptimo: 607.9269. Este valor de λ es el que el modelo ha encontrado como más adecuado para balancear el ajuste (ajuste a los datos) y la complejidad del modelo (penalización de los coeficientes). El valor de λ es relativamente alto, lo que nos indica que se ha aplicado una fuerte penalización sobre los coeficientes para evitar el sobreajuste.
+
+- Coeficientes del modelo Ridge vs. OLS: comparando los coeficientes obtenidos en la regresión Ridge con los de una regresión OLS (sin penalización), podemos ver cómo la penalización λ afecta a los coeficientes:
+
+  - Coordenadas espaciales X y Y: los coeficientes de X y Y se reducen en la regresión Ridge (0.165 y 0.213 respectivamente) comparado con la regresión OLS (2.256 y -0.148). Esto significa que, en Ridge, el modelo es menos sensible a las posiciones específicas dentro del parque, porque se ha aplicado una regularización para evitar que el modelo ajuste demasiado a los datos.
+  
+  - Meses y días: los coeficientes de los meses y los días tienen valores mucho más pequeños en la regresión Ridge que en OLS. Esto indica que la regularización está reduciendo el impacto de los factores temporales (meses y días) en la predicción del área quemada. Algunos meses como enero y noviembre tienen coeficientes negativos en la regresión Ridge (-0.769 y -1.036 respectivamente), lo que sugiere que esos meses tienen una relación inversa con el área quemada, pero esa relación se suaviza debido a la penalización.
+  
+  - Índices FWI (FFMC, DMC, DC, ISI): los coeficientes de estos índices también se han reducido considerablemente en la regresión Ridge en comparación con OLS. Por ejemplo, el coeficiente de FFMC en Ridge es 0.033, mientras que en OLS es -0.095. Esto indica que la regularización está atenuando la influencia de estos índices.
+  
+  - Temperatura (temp), humedad relativa (RH), viento (wind) y lluvia (rain): los coeficientes de estas variables también han sido reducidos en la regresión Ridge. Por ejemplo, la temperatura tiene un coeficiente de 0.090 en Ridge comparado con 1.296 en OLS. Esto sugiere que el modelo Ridge está tratando de evitar que la temperatura influya demasiado en el modelo, a pesar de que en la regresión OLS tenía un coeficiente bastante alto.
+  
+
+### Refresión Lasso
+
+Cuando se tiene un conjunto de predictores con posibles redundancias o ruido, Lasso permite identificar cuáles son las variables más relevantes para el modelo, lo que facilita la interpretación y reduce la complejidad del análisis.
+
+```{r}
+set.seed(123)
+modelo_lasso <- glmnet(X, Y, alpha = 1)  # alpha = 1 indica regresión Lasso
+
+# Obtenemos el lambda óptimo con validación cruzada
+cv_lasso <- cv.glmnet(X, Y, alpha = 1)
+lambda_optimo <- cv_lasso$lambda.min  # Mejor valor de lambda
+
+print(lambda_optimo)
+```
+
+```{r}
+# Ajustamos el modelo final con lambda óptimo
+modelo_lasso_final <- glmnet(X, Y, alpha = 1, lambda = lambda_optimo)
+
+
+# Coeficientes
+output=cbind(round(coef(modelo_lasso_final),3),output)
+
+colnames(output)=c("LASSO","RIDGE","OLS")
+
+output
+```
+
+**Análisis de los resultados**
+
+Al analizar los resultados de la regresión Lasso con un valor óptimo de λ de 6.22232, podemos hacer las siguientes observaciones comparando con la regresión Ridge y la regresión OLS:
+
+Al comparar los coeficientes de la regresión Lasso vs. Ridge vs. OL obtenemos lo siguiente:
+
+- X y Y: los coeficientes de las coordenadas espaciales se eliminan completamente en Lasso. Esto sugiere que en este caso, Lasso ha considerado que las coordenadas espaciales no son relevantes para predecir el área quemada, en contraste con Ridge, que asigna coeficientes pequeños pero no cero.
+
+- Meses y días: similar a las coordenadas, todos los coeficientes de los meses y días se eliminan. Esto significa que, según el modelo Lasso, los efectos de las fechas (meses y días de la semana) no son útiles para la predicción del área quemada. Esto difiere de Ridge, que mantiene coeficientes no cero para la mayoría de estos factores.
+
+- Variables meteorológicas: en Lasso, algunas de las variables meteorológicas como FFMC, DMC, DC, ISI, RH, y wind también tienen coeficientes igual a cero, lo que sugiere que Lasso no considera que estas variables contribuyan de manera significativa para predecir el área quemada.
+
+Conclusión: mientras que Ridge reduce los coeficientes de las variables pero las mantiene en el modelo, Lasso las elimina por completo, dejando un modelo más esquelético con menos variables y, por ende, más fácil de interpretar.
+
+
+## **Elastic Net**
+
+La regresión Elastic Net es una técnica de regularización que combina las propiedades de Ridge y Lasso, abordando algunas de sus limitaciones individuales.
+
+```{r}
+set.seed(123)
+
+modelo_elastic_net <- glmnet(X, Y, alpha = 0.5)  # Alpha = 0.5 (50% Ridge, 50% Lasso)
+
+cv_elastic_net <- cv.glmnet(X, Y, alpha = 0.5)
+lambda_optimo <- cv_elastic_net$lambda.min  # Mejor valor de lambda
+
+print(lambda_optimo)
+```
+
+
+```{r}
+modelo_elastic_final <- glmnet(X, Y, alpha = 0.5, lambda = lambda_optimo)
+
+# Coeficientes
+output=cbind(round(coef(modelo_elastic_final),3),output)
+
+colnames(output)=c("ELASTIC","LASSO","RIDGE","OLS")
+
+output
+```
+**Análisis de los resultados**
+
+Al analizar los resultados de la regresión Elastic Net con un valor óptimo de λ de 12.44464, y compararlos con los resultados de Lasso y Ridge, podemos hacer las siguientes observaciones:
+
+El valor de λ en Elastic Net se encuentra entre los valores de Ridge y Lasso, lo que indica que la regularización se encuentra entre las dos. Elastic Net es una combinación de las regularizaciones Lasso y Ridge, lo que le permite tener tanto las propiedades de selección de características de Lasso como la capacidad de manejar la multicolinealidad de Ridge.
+
+Coeficientes de Elastic Net en comparación con los otros modelos: 
+
+- En Elastic Net, al igual que en Lasso, los coeficientes se reducen a cero. Esto indica que Elastic Net también realiza selección de características, eliminando las variables menos relevantes para la predicción del área quemada.
+
 ## Modelos no lineales
 
 De los modelos lineales claramente no podemos extraer demasiadas conclusiones ni hacer predicciones precisas ya que las relaciones de nuestra variable objetivo con el resto de las variables no son lineales. Es por ello que debemos utilizar modelos con transformaciones no lineales para conseguir una mejor predicción.
@@ -1258,6 +1477,15 @@ Un análisis más profundo revela que los modelos lineales incumplen varios de s
 
 Estos hallazgos sugieren que el enfoque lineal no es adecuado para este tipo de problemas meteorológicos donde predominan distribuciones asimétricas y eventos extremos. La falta de ajuste de estos modelos justifica la exploración de alternativas no lineales y métodos específicamente diseñados para manejar datos con exceso de ceros.
 
+En cuanto a la selección de variables, hemos utilizado el método stepwise, el cual identificó tres variables (X, DMC y RH) para predecir el área. Sin embargo, solo RH resultó ser estadísticamente significativa. A pesar de la reducción en el número de variables, el modelo presentó un bajo ajuste, con un valor de R-cuadrado bajo, lo que indica que no explica adecuadamente la variabilidad de la variable dependiente. Esto sugiere que podrían existir otros factores relevantes no contemplados, y que el modelo podría mejorarse mediante la incorporación de más variables o la exploración de interacciones adicionales.
+
+En el caso de la regresión OLS, al no aplicar ninguna penalización, ajustamos el modelo sin ningún tipo de control, lo que resulta en coeficientes muy grandes, especialmente para variables como las coordenadas espaciales y los meses. Esto podría hacer que estas variables tengan una influencia desproporcionada, afectando negativamente la capacidad de generalización del modelo.
+
+Por otro lado, la regresión Ridge mantiene todas las variables, pero reduce la magnitud de los coeficientes. Esto significa que, aunque las variables siguen presentes, su influencia sobre la predicción es más moderada. Ridge controla el sobreajuste, pero sigue manteniendo variables con contribuciones pequeñas o ruidosas, como las coordenadas espaciales y los meses, aunque con un impacto reducido.
+
+En cuanto a Lasso, la regularización L1 lleva a que algunos coeficientes se eliminen completamente, descartando ciertas variables que no aportan mucho al modelo. Esto simplifica el modelo, pero puede perder información relevante, especialmente en el caso de las variables meteorológicas, que son clave para predecir el área quemada.
+
+Finalmente, Elastic Net combina L1 (de Lasso) y L2 (de Ridge), buscando equilibrar lo mejor de ambos métodos. Sin embargo, eliminó casi todas las variables, resultando en un modelo muy similar a Lasso. Esto es inesperado, ya que esperábamos que Elastic Net mantuviera algunas variables importantes. Es probable que el valor de lambda sea demasiado alto, aplicando demasiada regularización y simplificando excesivamente el modelo, lo que puede generar un sobreajuste excesivo.
 
 En cuanto a los modelos no lineales, vemos como el desbalance de los datos (muchos ceros y valores pequeños), afecta mucho a las predicciones. Todos los modelos no lineales que hemos hecho, independientemente de la transformación que hagamos de las variables, son muy poco precisos, aunque es cierto que con varias de estas transformaciones conseguimos que los residuos de los modelos se acerquen mucho más a las condiciones necesarias que con modelos lineales. En el caso del modelo Yeo-Johnson sin ceros conseguimos un R² ajustado "alto" en comparación con otros modelos que hemos probado, además de conseguir buenas métricas en el resto de aspectos en comparación con los demás modelos. También con este modelo hemos conseguido tener unos residuos cerca de ser normales y homocedásticos según nuestros contrastes de hipótesis, por lo que podemos considerar que este modelo es el mejor dentro de los que hemos probado, sin ser realmente útil, ni poder predecir el área de los incendios. 
 
@@ -1268,3 +1496,13 @@ Por otra parte, sin tocar los datos, podríamos desarrollar un modelo ensamblado
 Siguiendo la linea de utilizar un modelo con dos partes, también podría ser interesante utilizar un modelo hurdle, este tipo de modelo nos ayudaría a predecir la probabilidad de que el área sea cero con un modelo logístico o probabilístico y haríamos una predicción del área con una poisson, una binomial negativa o una regresión gamma. 
 
 Por último, y saliéndose un poco del *scope* de la asignatura, los autores del artículo original del que probiene el dataset, recomiendan utilizar un modelo SVM gausiano con las condiciones meteorológicas, lo cual hace que los incendios pequeños (que son la mayoría) sean predichos mejor, aunque seguiría teniendo problema con los atípicos, aquellos incendios grandes que no se producen por unas condiciones en particular. 
+
+
+
+
+**Reparto del trabajo:**
+
+- Aplicación del modelo de regresión lineal: Marc
+- Selección de variables y regularización: Yasmin
+- Modelos no lineales y transformación de variables: Gonzalo
+- Memoria escrita (incluye EDA): todos

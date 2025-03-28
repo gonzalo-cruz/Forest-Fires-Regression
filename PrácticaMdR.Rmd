@@ -858,7 +858,7 @@ summary(modelo_sin_outliers)
 
 El modelo con la eliminación de los outliers sigue sin ser significativo. Otro problema con los datos que puede estar alterando los datos es la abundancia de ceros. Para verificar este efecto, vamos a realizar un modelo que excluya estos casos, lo que nos permitirá evaluar cómo los efectos meteorológicos afectan el tamaño de los incendios cuando estos ocurren. 
 
-## Repetir el proceso para el modelo sin ceros en "area"
+### Repetir el proceso para el modelo sin ceros en "area"
 
 ```{r}
 # Filtrar datos sin ceros en "area"
@@ -1502,7 +1502,7 @@ Por último, y saliéndose un poco del *scope* de la asignatura, los autores del
 
 
 
-**Reparto del trabajo:**
+## **Reparto del trabajo**
 
 - Aplicación del modelo de regresión lineal: Marc
 - Selección de variables y regularización: Yasmin

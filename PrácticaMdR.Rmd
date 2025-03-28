@@ -705,7 +705,7 @@ variables <- c("temp", "RH", "wind", "FFMC", "DMC", "DC", "ISI", "rain")
 # Bucle para calcular R² de cada modelo
 for (var in variables) {
   modelo <- lm(paste("area ~", var), data = datos)
-  r2 <- summary(modelo)$r.squared
+  r2 <- summary(modelo)$adj.r.squared
   cat("El modelo con", var, "tiene un R² de:", round(r2, 4), "\n")
 }
 ```
@@ -770,7 +770,7 @@ shapiro_test <- shapiro.test(residuos)
 print(shapiro_test)
 ```
 
-La prueba de Shapiro-Wilk evalúa si los residuos siguen una distribución normal. Un p-valor menor a 0.05 sugiere que los residuos no son normales. En este caso, el p-valor es menor a  0.05 lo que confirma las conclusiones que hemos podido sacar de los gráficos.
+La prueba de Shapiro-Wilk evalúa si los residuos siguen una distribución normal. Un p-valor menor a 0.05 sugiere que los residuos no son normales. En este caso, el p-valor es menor a 0.05 lo que confirma las conclusiones que hemos podido sacar de los gráficos.
 
 #### **Prueba de Durbin-Watson para autocorrelación de los residuos**
 
@@ -781,10 +781,56 @@ print(durbin_watson)
 
 La prueba de Durbin-Watson evalúa si los residuos están autocorrelacionados. Un valor cercano a 2 sugiere que no hay autocorrelación. En este caso, el estadístico es menor a 0.05 lo que sugiere autocorrelación.
 
+#### **Distancia de Cook**
 
-Como se ha comentado, la abundancia de ceros pueden estar ocultando relaciones entre las variables y la extensión de los incendios. Para verificar este efecto, vamos a realizar un modelo que excluya estos casos, lo que nos permitirá evaluar cómo los efectos meteorológicos afectan el tamaño de los incendios cuando estos ocurren. 
+A lo largo del EDA y del diágnostico se ha notado la presencia de valores atípicos que pueden distorsionar los resultados del modelo. La Distancia de Cook es una métrica que nos permite identificar estos puntos problemáticos, midiendo cómo cambian los coeficientes de regresión y las predicciones cuando se excluye cada observación. Al aplicar este diagnóstico, buscamos garantizar que nuestras conclusiones no estén siendo influenciadas por observaciones inusuales, sino que verdaderamente reflejen las relaciones en los datos.
 
-### **Repetir el proceso para el modelo sin ceros en "area"**
+```{r}
+n <- nrow(datos)  # Número de observaciones
+
+# Calcular la Distancia de Cook
+cooks_distance <- cooks.distance(modelo_simple)
+
+# Calcular umbral
+cooks_threshold <- 4/n
+
+# Graficar la distacia de Cook
+plot(cooks_distance,
+     main = "Distancia de Cook",
+     xlab = "Índice de Observación",
+     ylab = "Distancia de Cook",
+     pch = 19, col = "blue", ylim=c(min(cooks_distance)*.9,max(cooks_distance)*1.05))
+abline(h = cooks_threshold, col = "red", lwd = 2, lty = 2)
+text(which(cooks_distance > cooks_threshold), cooks_distance[cooks_distance > cooks_threshold],
+     labels = which(cooks_distance > cooks_threshold), pos = 3, col = "red")
+```
+
+```{r}
+cat("Observaciones influyentes:\n")
+print(which(cooks_distance > cooks_threshold))
+```
+
+La Distancia de Cook ha identificado siete observaciones influyentes en nuestro modelo de regresión lineal. Entre estos, destacan especialmente las observaciones 239 y 416 que como se puede ver en el gráfico tienen un gran impacto en los resultados del modelo y  cuestionan la robustez del modelo. 
+
+Estas dos observaciones se pueden deber a incendios extremadamente grandes frente al resto o podrían indicar errores de medición, esta situación nos obliga a cuestionar la validez de los resultados. Es interesante quitar estas observaciones y compararlo con el modelo original.
+
+```{r}
+# Identificar observaciones influyentes
+outliers <- which(cooks_distance > cooks_threshold)
+
+# Crear nuevo dataset sin outliers
+datos_sin_outliers <- datos[-outliers, ]
+
+# Ajustar modelo sin outliers
+modelo_sin_outliers <- lm(area ~ temp, data = datos_sin_outliers)
+
+# Mostrar resumen del modelo
+summary(modelo_sin_outliers)
+```
+
+El modelo con la eliminación de los outliers sigue sin ser significativo. Otro problema con los datos que puede estar alterando los datos es la abundancia de ceros. Para verificar este efecto, vamos a realizar un modelo que excluya estos casos, lo que nos permitirá evaluar cómo los efectos meteorológicos afectan el tamaño de los incendios cuando estos ocurren. 
+
+## Repetir el proceso para el modelo sin ceros en "area"
 
 ```{r}
 # Filtrar datos sin ceros en "area"
@@ -806,7 +852,7 @@ Observamos que el valor del $R^2$ entre la variable "area" y la temperatura ha  
 # Bucle para calcular R**2 de cada modelo
 for (var in variables) {
   modelo2 <- lm(paste("area ~", var), data = datos2)
-  r2 <- summary(modelo2)$r.squared                   
+  r2 <- summary(modelo2)$adj.r.squared                   
   cat("El modelo con", var, "tiene un R² de:", round(r2, 4), "\n")
 }
 ```
@@ -862,8 +908,9 @@ residuos_multiple <- resid(modelo_multiple)
 # Resumen estadístico
 summary(modelo_multiple)
 ```
+Despues de probar muchas combinaciones de variables, nos hemos dado cuenta que ninguna combinación tiene significancia importante en un modelo lineal múltiple, por lo que haremos un modelo que incorpora variables meteorológicas e índices FWI. Aunque el análisis exploratorio mostró relaciones débiles y no lineales con el área quemada, incluimos todas las variables potencialmente relevantes para evaluar sus efectos combinados.
 
-
+Al final, este modelo nos sirve como punto de partida para demostrar que necesitamos enfoques diferentes que puedan captar mejor cómo funcionan realmente los incendios forestales.
 
 #### **Gráfico de residuos vs valores ajustados **
 
@@ -913,10 +960,12 @@ durbin_watson <- dwtest(modelo_multiple)
 print(durbin_watson)
 ```
 
-El p-valor de la prueba de Durbin-Watson es menor a 0.05, por lo tanto los residuos del modelo son autocorrelados.
+El p-valor de la prueba de Durbin-Watson es menor a 0.05, por lo tanto los residuos del modelo son autocorrelados. Hemos podido comprobar que al igual que pasaba con el modelo de regresión lineal simple, el modelo lineal múltiple no cumplen los supuestos. 
 
 
-Hemos podido comprobar que al igual que pasaba con el modelo de regresión lineal simple, el modelo lineal múltiple no cumplen los supuestos. Esto nos está indicando que un modelo lineal no es el indicado para nuestro caso, por lo tanto lo tendremos que obtar por o bien seleccionar y transformar las variables o intentar aplicar modelos no lineales.
+Los resultados obtenidos incumplen los supuestos, al tener problemas de normalidad de los residuos, la heterocedasticidad detectada y la escasa capacidad explicativa de los modelos, así como los valores extremadamente bajos del R² demuestran que los modelos de regresión lineal presentan serias limitaciones para analizar este conjunto de datos.
+
+Es evidente que necesitamos intentar enfoques más flexibles que puedan adaptarse mejor a las características particulares de estos datos. Las transformaciones no lineales de las variables o la implementación de modelos diseñados para manejar distribuciones asimétricas y valores extremos pueden crear modelos que permitan una interpretación más clara y mejorar la capacidad predictiva.
 
 
 ## Selección de variables y regularización
@@ -1202,6 +1251,13 @@ plot(comparison_results)
 Podemos ver en esta gráfica como el modelo de los splines tiene el R² sin ajustar más alto, aunque en el resto de métricas no es tan bueno y los residuos no cumplen las condiciones necesarias, por lo que tampoco sería un modelo válido. también podemos ver como el modelo con la transformación Yeo-Johnson eliminando los ceros y utilizando ISI tiene el R² ajustado más alto, por lo que el ajuste es mejor en este modelo. A pesar de esto, tiene también el valo más alto de RMSE, lo cual nos dice que tiene muchos residuos, en este caso el mejor modelo es el polinómico. En cuanto al AIC y BIC, el mejor modelo también es el Yeo-Johnson, esto se debe a que nuestra gráfica muestra los pesos derivados del AIC y BIC, no los valores, si fueran los valores, cuanto más bajos mejor, sin embargo en este caso al tratarse de los pesos, cuanto más grandes mejor. Teniendo todo esto en cuenta, además del análisis anterior de los residuos de cada uno de los modelos, podemos decir que el modelo con la transformación yeo-johnson eliminando ceros y utilizando la variable ISI es el mejor, al menos en cuanto a la distribución y características de los resíduos y el R², tanto el ajustado como el normal.
 
 ## Conclusiones
+
+Los modelos de regresión lineal, tanto simple como múltiple, son ineficaces a la hora de predecir nuestros datos de incendios forestales. La capacidad explicativa de estos modelos resulta ser extremadamente baja. Este bajo rendimiento se debe a los valores de la variable objetivo, donde la mayoría de observaciones presentan valores nulos o mínimos de área quemada, mientras que unos pocos incendios extremos afectan las relaciones lineales.
+
+Un análisis más profundo revela que los modelos lineales incumplen varios de sus supuestos fundamentales. Los residuos no siguen una distribución normal, muestran patrones de heterocedasticidad y están fuertemente influenciados por valores atípicos, como evidencian las altas distancias de Cook asociadas a los incendios de mayor magnitud. En el caso de la regresión múltiple, la presencia de multicolinealidad entre variables climáticas dificulta la interpretación de los coeficientes individuales.
+
+Estos hallazgos sugieren que el enfoque lineal no es adecuado para este tipo de problemas meteorológicos donde predominan distribuciones asimétricas y eventos extremos. La falta de ajuste de estos modelos justifica la exploración de alternativas no lineales y métodos específicamente diseñados para manejar datos con exceso de ceros.
+
 
 En cuanto a los modelos no lineales, vemos como el desbalance de los datos (muchos ceros y valores pequeños), afecta mucho a las predicciones. Todos los modelos no lineales que hemos hecho, independientemente de la transformación que hagamos de las variables, son muy poco precisos, aunque es cierto que con varias de estas transformaciones conseguimos que los residuos de los modelos se acerquen mucho más a las condiciones necesarias que con modelos lineales. En el caso del modelo Yeo-Johnson sin ceros conseguimos un R² ajustado "alto" en comparación con otros modelos que hemos probado, además de conseguir buenas métricas en el resto de aspectos en comparación con los demás modelos. También con este modelo hemos conseguido tener unos residuos cerca de ser normales y homocedásticos según nuestros contrastes de hipótesis, por lo que podemos considerar que este modelo es el mejor dentro de los que hemos probado, sin ser realmente útil, ni poder predecir el área de los incendios. 
 

@@ -927,7 +927,7 @@ De los modelos lineales claramente no podemos extraer demasiadas conclusiones ni
 
 Primeramente utilizaremos regresión polinómica
 
-**Modelos polinómicos**
+#### **Modelos polinómicos**
 ```{r}
 set.seed(123)
 # ajuste del modelo polinómico de grado 2
@@ -963,7 +963,7 @@ Vemos como eliminar los ceros no nos ayuda, ya que la mayoría de los incendios 
 
 Podemos utilizar splines para intentar, utilizando modelos polinómicos distintos para cada tramo, ajustar mejor nuestro modelo. Para ello dividimos por cuartiles 
 
-**Modelo splines**
+#### **Modelo splines**
 ```{r}
 # vamos a dividirlo por cuartiles 
 modelo_spline_bs <- lm(datos$area ~ bs(datos$temp, knots = quantile(datos$temp, c(0.25, 0.5, 0.75))))
@@ -976,7 +976,7 @@ Vemos que hacer splines mejora ligeramente el ajuste de nuestro modelo (nuestro 
 
 Como hemos podido ver, un modelo polinómico no es mejor que un modelo lineal para nuestros datos, es por ello que vamos a utilizar un modelo logarítmico, sumando 1 a nuestra variable objetivo ya que tenemos ceros en esta y si no, no existirá el logaritmo. Además, la transformación logarítmica nos ayuda a lidiar con los dos outliers que tenemos, haciendo que influyan menos en el modelo:
 
-**Modelos logarítmicos**
+#### **Modelos logarítmicos**
 ```{r}
 # transformamos nuestra variable objetivo con un logaritmo
 set.seed(123)
@@ -1074,7 +1074,7 @@ Primeramente vamos a probarlo con los datos completos, sin quitar los ceros y m�
 
 En este caso utilizamos la variable temperatura que en modelos con ceros es la que mejores predicciones nos da
 
-**Modelos Yeo-Johnson**
+#### **Modelos Yeo-Johnson**
 ```{r}
 
 # Aplicar la transformación Yeo-Johnson
@@ -1178,7 +1178,7 @@ Este modelo podría servirnos. Los residuos están bastante cerca de seguir una 
 
 Vamos a comparar nuestros modelos no lineales. Para ello vamos a utilizar distintas métricas como el R² ajustado o el AIC:
 
-**Comparativa de modelos no lineales**
+#### **Comparativa de modelos no lineales**
 
 ```{r}
 # Creamos una lista con todos los modelos

@@ -84,6 +84,8 @@ library(GGally)
 library(car)
 library(performance)
 library(splines)
+library(glmnet)
+
 datos <- read.csv("forestfires.csv", sep=",", header=TRUE)
 ```
 

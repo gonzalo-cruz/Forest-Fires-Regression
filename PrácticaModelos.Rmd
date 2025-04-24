@@ -1,0 +1,1433 @@
+---
+title: "Práctica 1 Modelos de Regresión"
+author: "Marc Gil Arnau, Gonzalo Cruz Gómez, Yasmin Ezzarqtouni Marzoug"
+date: "2025-02-20"
+output: 
+  html_document:
+    theme: flatly
+    toc: yes
+    toc_float:
+      collapsed: true
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+## Índice
+
+## Introducción
+
+Este trabajo estudia los factores que influyen en el área quemada en el Parque Natural de Montesinho en Portugal . El entendimiento de estos factores es crucial para manejar de manera eficaz las situaciones que pueden dar lugar a incendios, así como aplicar estrategias para mitigarlos. El dataset tiene información detallada de las condiciones climáticas (temperatura, humedad, viento y lluvia), índices de riesgo de incendio del Fire Weather Index (FFMC, DMC, DC, ISI), coordenadas X e Y, además de variables temporales como día y mes. Se trata de una tarea de regresión complicada debido a lo poco balanceada que está la variable objetivo (área), la cual incluye una gran cantidad de ceros. Esta práctica explora varios enfoques de modelado, desde regresiones lineales, tanto simples como múltiples, selección de variables y modelos no lineales para tratar de identficar el modelo óptimo para predecir el área quemada.
+
+## Metodología
+
+Esta práctica aplica el lenguaje de programación R además de varias librerías para analítica de datos y modelado. La metodología del trabajo se estructura de la siguiente manera:
+
+**1. Adquisición de datos, preprocesado y análisis exploratorio de los datos (EDA)**
+
+-   Adquisición de los datos y preprocesado
+-   Análisis univariante
+-   Análisis de la variable objetivo
+-   Análisis multivariante
+
+**2. Modelado**
+
+-   Regresión lineal
+-   Selección de variables y regularización
+-   Regresión no lineal y transformación de variables
+
+**3. Comparación de los modelos**
+
+-   Análisis de residuos y visualizaciones de las métricas de rendimiento
+
+**4. Resultados y conclusiones**
+
+-   Se presentan los hallazgos del análisis
+-   Se discuten los resultados
+-   Se destacan las limitaciones del análisis y se estudian los métodos a aplicar a futuro
+
+## Comprensión del problema
+
+**Variables:**
+
+1.  **X** - Coordenada espacial en el eje X dentro del mapa del parque Montesinho: de 1 a 9.
+2.  **Y** - Coordenada espacial en el eje Y dentro del mapa del parque Montesinho: de 2 a 9.
+3.  **month** - Mes del año: de "jan" (enero) a "dec" (diciembre).
+4.  **day** - Día de la semana: de "mon" (lunes) a "sun" (domingo).
+5.  **FFMC** - Índice FFMC del sistema FWI: de 18.7 a 96.20.
+6.  **DMC** - Índice DMC del sistema FWI: de 1.1 a 291.3.
+7.  **DC** - Índice DC del sistema FWI: de 7.9 a 860.6.
+8.  **ISI** - Índice ISI del sistema FWI: de 0.0 a 56.10.
+9.  **temp** - Temperatura en grados Celsius: de 2.2 a 33.30.
+10. **RH** - Humedad relativa en %: de 15.0 a 100.
+11. **wind** - Velocidad del viento en km/h: de 0.40 a 9.40.
+12. **rain** - Lluvia en el exterior en mm/m²: de 0.0 a 6.4.
+13. **area** - Área quemada del bosque (en hectáreas): de 0.00 a 1090.84.
+
+## Comprensión de los datos y EDA
+
+Cargamos los datos y las librerias
+
+```{r}
+library(readr)
+library(caret) # Para la transformación Yeo-Johnson
+library(lmtest) # Para la prueba de homocedastidad
+library(corrplot)
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(caret)
+library(tidyverse)
+library(knitr) 
+library(corrplot)
+library(GGally)
+library(car)
+library(performance)
+library(splines)
+datos <- read.csv("forestfires.csv", sep=",", header=TRUE)
+```
+
+Visualizamos las primeras filas del dataset:
+
+```{r}
+head(datos)
+```
+
+### EDA
+
+Tamaño del dataset
+
+```{r}
+dim(datos)
+```
+
+Hay 517 observaciones y 13 variables.
+
+Tipos de variables
+
+```{r}
+str(datos)
+```
+
+Variables continuas: FFMC, DMC, DC, ISI, temp, wind, rain y area. Variables discretas: RH, X e Y. Variables texto: month y day.
+
+Vamos a ver si tenemos valores faltantes:
+
+```{r}
+anyNA(datos) 
+```
+
+No hay datos faltantes.
+
+Vemos cuantos valores del target (area) son distintos de 0 y cuantos iguales a 0
+
+```{r}
+table(datos$area>0)
+```
+
+Primeramente vamos a hacer un análisis univariante: \#### Estudio por variable:
+
+##### **Área (variable objetivo):**
+
+La variable **área** representa la superficie quemada en un incendio forestal, medida en hectáreas (ha). Los valores de esta variable varían de 0.00 a 1090.84 ha, pero está muy sesgada hacia 0.0, lo que indica que la mayoría de los incendios son pequeños. Esta variable es nuestra variable objetivo y nos sirve para entender la relación entre la magnitud del incendio y las condiciones meteorológicas y geográficas.
+
+```{r}
+summary(datos$area)    
+```
+
+```{r}
+hist(datos$area, 
+     main = "Histograma de Área Quemada", 
+     xlab = "Área (hectáreas)", 
+     ylab = "Frecuencia", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 40)  
+```
+
+**Análisis de la variable área**
+
+Observamos que la variable tiene una distribución altamente sesgada hacia valores bajos, con un mínimo de 0.00 y una mediana de apenas 0.52 hectáreas, lo que indica que la mayoría de los incendios afectan superficies pequeñas. Sin embargo, la media de 12.85 hectáreas es significativamente más alta debido a valores extremos, como el máximo de 1090.84 hectáreas.
+
+-   **Histograma:** tiene una distribución altamente sesgada hacia la derecha, con una concentración predominante de valores cercanos a 0.0 hectáreas. Esto indica que la mayoría de los incendios forestales registrados en el dataset abarcan áreas quemadas muy pequeñas, siendo los incendios de mayor magnitud eventos inusuales.
+
+##### **Coordenada X**
+
+La variable X representa la coordenada horizontal dentro del parque Montesinho en Portugal, donde se han registrado incendios forestales. Es una variable discreta con valores que oscilan entre 1 y 9, indicando la ubicación espacial de los incendios en el eje X del mapa. Esta variable nos permite situar geográficamente cada incendio.
+
+```{r}
+summary(datos$X)
+```
+
+```{r}
+barplot(table(datos$X), col = "steelblue", main = "Distribución de X", xlab = "Coordenada X", ylab = "Frecuencia")
+
+```
+
+```{r}
+table(datos$X)
+```
+
+**Análisis de los resultados de la variable X**
+
+Los resultados de la variable X nos muestran que las coordenadas X dentro del parque Montesinho están distribuidas de manera relativamente centrada, con valores que van del **1** al **9**. La mayoría de los incendios se encuentran en las coordenadas **4** (91 incendios), **6** (86 incendios) y **2** (73 incendios), representando un porcentaje significativo de las observaciones.
+
+El **mínimo es 1** y el **máximo es 9**, lo que indica que la variable **X** cubre un rango de ubicaciones en el eje horizontal del mapa del parque. La **media de 4.669** y la **mediana de 4** reflejan que la distribución de los incendios está ligeramente sesgada hacia las coordenadas más altas (6 y 7), ya que la media es mayor que la mediana.
+
+##### **Coordenada Y**
+
+La variable **Y** representa la coordenada vertical dentro del mapa del parque Montesinho en Portugal, similar a la variable **X**, pero en el eje vertical. Es una variable discreta, con valores que oscilan entre 2 y 9. Junto con la variable X, permite ubicar geográficamente los incendios forestales dentro del parque.
+
+```{r}
+summary(datos$Y)
+```
+
+```{r}
+barplot(table(datos$Y), col = "steelblue", main = "Distribución de Y", xlab = "Coordenada Y", ylab = "Frecuencia")
+```
+
+```{r}
+table(datos$Y)
+```
+
+**Análisis de la variable Y**
+
+En la variable **Y** observamos que las coordenadas **4** y **6** concentran la mayoría de los incendios, mientras que la coordenada **8** tiene la menor frecuencia, con solo un registro. Esto sugiere que algunas áreas son más propensas a incendios que otras, posiblemente debido a factores como la vegetación, el clima o la exposición a condiciones meteorológicas más extremas.
+
+##### **Mes**
+
+La variable **mes** es una variable categórica que representa el mes del año en el que ocurrió cada incendio. Los valores posibles son los nombres de los 12 meses del año. Esta variable es clave para identificar patrones estacionales en la ocurrencia de incendios, ya que los incendios pueden estar influenciados por las condiciones climáticas específicas de cada mes.
+
+```{r}
+# Crear el gráfico
+barplot(table(datos$month), 
+        col = "steelblue", 
+        main = "Distribución de los Incendios por Mes", 
+        xlab = "Mes", 
+        ylab = "Frecuencia",  
+        las = 2)  # las = 2 para rotar los nombres de los meses
+```
+
+```{r}
+table(datos$month)
+```
+
+**Análisis de la variable month**
+
+La variable **month** nos muestra que los incendios son más comunes en los meses de **agosto y septiembre**, con 184 y 172 incendios registrados respectivamente, probablemente debido al clima más cálido y seco. En cambio, en **enero, mayo y noviembre** hay muy pocos incendios, con 2, 2 y 1 incendios respectivamente, lo que indica que estas épocas tienen un menor riesgo. Esto demuestra que los incendios siguen un patrón relacionado con las estaciones del año.
+
+##### **Día de la semana**
+
+La variable **día** es una variable **categórica** que representa el día de la semana en que ocurrió un incendio forestal. Los valores posibles son 'mon' (lunes), 'tue' (martes), 'wed' (miércoles), 'thu' (jueves), 'fri' (viernes), 'sat' (sábado) y 'sun' (domingo). Esta variable nos dice en qué día de la semana ocurrió el incendio, lo que nos puede ayudar a identificar si hay patrones relacionados con los días en los que ocurren más incendios.
+
+```{r}
+barplot(table(datos$day), main="Frecuencia de Días", col="steelblue", border="black")
+```
+
+```{r}
+table(datos$day)
+```
+
+**Análisis de la variable day**
+
+Los días **domingo** y **viernes** tienen la mayor cantidad de registros, con 95 y 85 incendios respectivamente, indicando que estos días tienen mayor actividad. Por otro lado, el miércoles presenta la menor frecuencia, con solo 54 incendios registrados, lo que sugiere una actividad más baja en este día. Los otros días tienen frecuencias intermedias, destacando variaciones en la ocurrencia de incendios a lo largo de la semana. Esto podría estar influenciado por factores como patrones climáticos o actividades humanas.
+
+##### **FFMC (Fine Fuel Moisture Code)**
+
+La variable **FFMC** (Fine Fuel Moisture Code) es un índice utilizado en el sistema de Índices de Peligro de Incendios Forestales (FWI). Este índice mide la **humedad de los combustibles finos**, como hojas secas y ramitas, que son fácilmente inflamables. Los valores de **FFMC** varían entre **18.7** y **96.20**, donde un valor bajo indica que los combustibles están más húmedos y, por lo tanto, es menos probable que se inicien incendios, mientras que un valor alto indica que los combustibles están muy secos y es más fácil que se produzcan incendios.
+
+```{r}
+summary(datos$FFMC)
+```
+
+```{r}
+hist(datos$FFMC, 
+     main = "Distribución de FFMC (Fine Fuel Moisture Code)", 
+     xlab = "FFMC", 
+     ylab = "Frecuencia", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 50)
+```
+
+```{r}
+boxplot(datos$FFMC, 
+        main = "Boxplot de FFMC (Fine Fuel Moisture Code)", 
+        ylab = "FFMC", 
+        col = "lightgreen")
+```
+
+**Análisis de la variable FFMC**
+
+-   **Histograma:** muestra una distribución sesgada a la izquierda con la mayoría de los valores concentrados entre 80 y 100. Esto indica que, en la mayoría de los casos, el combustible fino (como hojas y ramas pequeñas) tiene muy poca humedad, lo que incrementa el riesgo de incendio.
+
+-   **Boxplot:** nos muestra que la mayoría de los valores son altos, reflejando condiciones muy secas. La mediana está cercana al extremo superior, lo que confirma esta tendencia. Además, hay algunos valores atípicos en el rango bajo, que representan casos aislados de condiciones de menor humedad.
+
+###### **DMC (Duff Moisture Code)**
+
+La variable **DMC** (Duff Moisture Code) es otro índice del sistema FWI (Fire Weather Index) utilizado para medir la **humedad de los combustibles más gruesos**, como hojas y ramas secas, que son más difíciles de incendiar pero que pueden contribuir a la propagación del fuego.
+
+Los valores de DMC varían entre 1.1 y 291.3, donde un valor bajo indica que los combustibles están relativamente húmedos y es menos probable que se inicie un incendio, mientras que un valor alto sugiere que los combustibles están secos y hay mayor riesgo de incendio.
+
+```{r}
+summary(datos$DMC)
+```
+
+```{r}
+hist(datos$DMC, 
+     main = "Histograma de DMC (Duff Moisture Code)", 
+     xlab = "DMC", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 40)
+```
+
+```{r}
+boxplot(datos$DMC, 
+        main = "Boxplot de DMC (Duff Moisture Code)", 
+        ylab = "DMC", 
+        col = "lightgreen")
+```
+
+**Análisis de los resultados de DMC**
+
+-   **Histograma:** muestra que los valores más comunes de humedad de los combustibles gruesos están entre 50 y 150, con un pico alrededor de 100. Valores de DMC altos, que indican mayor riesgo de incendio, son menos frecuentes. Esto sugiere que, en general, los combustibles son moderadamente húmedos, pero aún existe un riesgo de incendios en condiciones de baja humedad.
+
+-   **Boxplot:** observamos valores atípicos en la parte superior entre 250 y 300, lo que indica que en algunos incendios el suelo estaba extremadamente seco. La mediana está en la parte media del rango, indicando que la mayoría de los incendios ocurren cuando la humedad del suelo está moderada o baja.
+
+##### **DC**
+
+La variable **DC** (Drought Code) es un índice del sistema FWI que mide la **sequedad de los combustibles más profundos** y de mayor tamaño, como la capa de tierra seca y material orgánico en descomposición. Su rango va de 7.9 a 860.6, donde valores bajos indican mayor humedad y menor riesgo de incendio, mientras que valores altos reflejan sequedad extrema y un mayor riesgo de propagación del fuego.
+
+```{r}
+summary(datos$DC)
+```
+
+```{r}
+hist(datos$DC, 
+     main = "Histograma de DC (Drought Code)", 
+     xlab = "DC", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 30)
+```
+
+```{r}
+boxplot(datos$DC, 
+        main = "Boxplot de DC (Drought Code)", 
+        ylab = "DC", 
+        col = "lightgreen")
+```
+
+**Análisis de los resultados de DC**
+
+-   **Histograma:** la distribución sesgada hacia la izquierda (asimetría positiva) muestra que la mayoría de los valores están entre 600 y 800, con un pico claro alrededor de 700, lo que refleja condiciones frecuentes de sequedad acumulada alta. Este patrón implica un mayor riesgo de incendios debido a la abundancia de material seco, aunque también se observa una ligera asimetría hacia valores más bajos.
+
+-   **Boxplot:** la mediana del DC está cerca de 700, confirmando la concentración observada en el histograma. Además, observamos que algunos valores atípicos más bajos podrían corresponder a periodos de mayor humedad o climas inusualmente húmedos.
+
+##### **ISI (Initial Spread Index)**
+
+La variable **ISI** (Initial Spread Index) es otro índice del sistema FWI (Fire Weather Index) que mide la **velocidad de propagación** del fuego en condiciones de viento y humedad actuales. Este índice se calcula utilizando la temperatura, la humedad relativa y la velocidad del viento, y refleja el riesgo inmediato de propagación del fuego bajo condiciones meteorológicas específicas.
+
+Los valores de ISI van de 0.0 a 56.10, donde un valor bajo indica que las condiciones para la propagación del fuego son favorables, mientras que un valor más alto sugiere un riesgo elevado, ya que el fuego se propaga más rápido debido a condiciones más secas y vientos fuertes.
+
+```{r}
+summary(datos$ISI)
+```
+
+```{r}
+hist(datos$ISI, 
+     main = "Histograma de ISI (Initial Spread Index)", 
+     xlab = "ISI", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 40)
+
+```
+
+```{r}
+boxplot(datos$ISI, 
+        main = "Boxplot de ISI (Initial Spread Index)", 
+        ylab = "ISI", 
+        col = "lightgreen")
+
+```
+
+**Análisis de a variable ISI**
+
+-   **Histograma:** el histograma tiene una distribución unimodal asimétrica positiva. La mayoría de los valores de ISI se encuentran entre 0 y 20, con un pico claro alrededor de 10, indicando que, generalmente, las condiciones iniciales de propagación del fuego tienden a ser bajas o moderadas, con pocos casos extremos.
+
+-   **Boxplot:** muestra una mediana de 8.4, con la mayoría de los valores entre 0 y 20. Los valores atípicos son principalmente superiores a 20, indicando incendios de propagación rápida, mientras que un valor atípico en 0 podría reflejar condiciones de baja propagación debido a alta humedad o falta de viento.
+
+##### **Temperatura en °C**
+
+La variable **temperatura** mide la temperatura del aire en grados Celsius. En nuestro contexto, la temperatura es un factor crucial porque influye directamente en el comportamiento del fuego. Las temperaturas más altas tienden a aumentar la deshidratación de la vegetación, haciendo que sean más propensos a prenderse fuego.
+
+Los valores de la variable temperatura oscilan entre 2.2°C y 33.3°C, con valores más altos generalmente asociándose con mayores riesgos de incendios.
+
+```{r}
+summary(datos$temp)
+```
+
+```{r}
+hist(datos$temp, 
+     main = "Histograma de Temperatura", 
+     xlab = "Temperatura (°C)", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 40)
+
+```
+
+```{r}
+boxplot(datos$temp, 
+        main = "Boxplot de Temperatura", 
+        ylab = "ISI", 
+        col = "lightgreen")
+
+```
+
+**Análisis de los resultados**
+
+-   **Histograma:** La distribución es ligeramente simétrica, con una mayor concentración entre 15°C y 25°C, lo que sugiere que los incendios ocurren en temperaturas moderadas a cálidas, pero no necesariamente en los días más calurosos.
+
+-   **Boxplot:** muestra que la mediana está en 19.30°C, con la mayoría de los valores entre 15 y 25°C. Los valores atípicos (outliers) están por debajo de 5°C, lo que podría reflejar condiciones inusuales de temperatura baja en algunas áreas, posiblemente relacionadas con condiciones meteorológicas excepcionales.
+
+##### **RH (humedad relativa)**
+
+La **humedad relativa** (RH) mide el porcentaje de vapor de agua en el aire. En incendios forestales, una baja humedad relativa (aire más seco) aumenta el riesgo de propagación del fuego, mientras que una alta humedad relativa dificulta el encendido y la expansión del fuego. Los valores de RH en este conjunto de datos varían entre 15% y 100%.
+
+```{r}
+summary(datos$RH) 
+```
+
+```{r}
+
+hist(datos$RH, 
+     main = "Histograma de Humedad Relativa", 
+     xlab = "Humedad Relativa (%)", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 40)
+
+```
+
+```{r}
+
+boxplot(datos$RH, 
+        main = "Boxplot de Humedad Relativa", 
+        ylab = "Humedad Relativa (%)", 
+        col = "lightgreen")
+
+```
+
+-   **Histograma:** muestra que la mayoría de los valores se concentran entre el 20% y el 60%, con picos significativos alrededor del 30% y el 40%. La frecuencia de valores de RH disminuye notablemente tanto por debajo del 20% como por encima del 60%.En general, esto sugiere que en muchas de las condiciones observadas, la humedad del aire está en niveles que podrían permitir la propagación del fuego, aunque no de forma extrema.
+
+-   **Boxplot:** el rango intercuartílico (IQR) va aproximadamente del 30% al 60%, con una mediana cercana al 45%. Además, se observan algunos valores atípicos por encima del 80%.
+
+##### **Wind**
+
+La variable **wind** mide la velocidad del viento en km/h. El viento influye en la propagación de los incendios, ya que un viento fuerte puede hacer que el fuego se propague más rápido, mientras que un viento débil ralentiza su expansión. Los valores de wind en nuestro conjunto de datos varían entre 0.4 km/h y 9.4 km/h.
+
+```{r}
+summary(datos$wind)
+```
+
+```{r}
+
+hist(datos$wind, 
+     main = "Histograma de Velocidad del Viento", 
+     xlab = "Velocidad del Viento (km/h)", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 30)
+
+```
+
+```{r}
+
+boxplot(datos$wind, 
+        main = "Boxplot de Velocidad del Viento", 
+        ylab = "Velocidad del Viento (km/h)", 
+        col = "lightgreen")
+
+```
+
+**Análisis de wind**
+
+-   **El Histograma** muestra una distribución ligeramente sesgada a la derecha, indicando que la mayoría de las mediciones se concentran en valores más bajos, con algunos casos de vientos más fuertes. La moda se encuentra alrededor de 4 km/h, siendo la velocidad más frecuente registrada en los datos. La dispersión sugiere que la mayoría de los valores oscilan entre 2 km/h y 6 km/h, con una menor frecuencia de velocidades superiores a 8 km/h, esto significa que, aunque la mayoría de los vientos son suaves o moderados, a veces se presentan ráfagas más fuertes, aunque no son muy comunes
+
+-   **El boxplot** la velocidad del viento está mayormente distribuida entre 3 km/h y 5.5 km/h, con una mediana en 4 km/h. Los bigotes se extienden desde aproximadamente 1 km/h hasta 8 km/h, lo que muestra el rango normal de variabilidad en la velocidad del viento. Observamos varios valores atípicos por encima de 8 km/h, lo que indica que hay episodios ocasionales de viento fuerte.
+
+##### **Rain**
+
+La variable **rain** mide la cantidad de lluvia en mm/m². Indica la cantidad de precipitación caída en un área durante un período determinado. En el contexto de los incendios forestales, la lluvia juega un papel crucial, ya que puede disminuir el riesgo de incendios al mojar la vegetación y los combustibles, dificultando su ignición y propagación. Por el contrario, la falta de lluvia contribuye a que la vegetación se seque, lo que aumenta el riesgo de incendios. Los valores de rain en este conjunto de datos varían entre 0.0 mm/m² y 6.4 mm/m².
+
+```{r}
+summary(datos$rain)
+```
+
+```{r}
+# Histograma de la variable Rain (lluvia)
+hist(datos$rain, 
+     main = "Histograma de Lluvia", 
+     xlab = "Cantidad de Lluvia (mm/m²)", 
+     col = "steelblue", 
+     border = "black", 
+     breaks = 40)
+
+```
+
+-   \*\*Histograma*:* esta sesgada hacia valores bajos (casi todos los datos son 0), lo que sugiere que los incendios ocurren mayoritariamente en condiciones secas, con lluvia muy poco frecuente o inexistente. La presencia de un pequeño número de valores no nulos podría reflejar lluvias ocasionales que no son suficientes para mitigar significativamente el riesgo de incendio.
+
+Vamos a ver cómo se relacionan nuestras variables mediante un análisis multivariante.
+
+#### Análisis multivariante
+
+Primeramente vamos a hacer una matriz de correlaciones para ver cómo de correladas están nuestras variables.
+
+```{r}
+# Matriz de correlación
+numeric_data <- datos[, sapply(datos, is.numeric)]
+
+correlation_matrix <- cor(numeric_data)
+
+print(correlation_matrix)
+
+corrplot(correlation_matrix, method = "circle")
+```
+
+1.  Correlaciones fuertes:
+
+-   DMC y DC tienen una correlación de 0.68, indicando que el contenido de humedad en el suelo está relacionado con la sequedad del terreno.
+
+-   FFMC y ISI tienen 0.53, lo que sugiere que ambos índices están relacionados con la propagación del fuego.
+
+-   FFMC y temp tienen 0.43, lo que indica que las temperaturas más altas favorecen condiciones secas para los incendios.
+
+2.  Correlaciones negativas moderadas:
+
+-   temp y RH tienen -0.53, lo que refleja que temperaturas altas están asociadas con baja humedad.
+
+-   RH y FFMC tienen -0.30, mostrando que mayor humedad relativa reduce los niveles del índice FFMC.
+
+3.  Correlaciones bajas o sin relación clara:
+
+-   wind tiene correlaciones bajas con la mayoría de las variables.
+
+-   rain tiene correlaciones débiles con área, sugiriendo que la lluvia no afecta significativamente el tamaño del incendio.
+
+4.  Con respecto a área:
+
+-   Las variables como X y Y muestran correlaciones bajas con área, lo que sugiere que la ubicación no está muy relacionada con el tamaño de los incendios.
+
+-   FFMC, DMC y ISI también tienen correlaciones bajas con el área quemada, aunque están relacionadas con otras condiciones que favorecen los incendios.
+
+Podemos ver que hay bastante correlación entre algunas de nuestras variables. Es por ello que más adelante tendremos que hacer una selección de variables.
+
+Si hacemos un pairs plot, podremos ver claramente cómo están relacionadas dichas variables:
+
+```{r}
+variables <- c("FFMC", "DMC", "DC", "ISI", "temp", "RH", "X", "Y")
+
+pairs(datos[, variables], 
+      main = "Pairs Plot")
+```
+
+Podemos ver como DC y DMC tienen una relación bastante lineal, temp y RH también, aunque en este caso se trata de una recta descendiente, como pudimos ver por la correlación negativa de nuestras variables. FFMC sigue una relación bastante lineal con ISI, aunque también se puede ver con temp, DMC, DC, incluso con RH; aunque al estar estos valores todos en la parte superior de la gráfica puede ser difícil verlo.
+
+A continuación vamos a ver cómo se relacionan nuestras variables con la variable objetivo, con ello buscaremos encontrar relaciones que nos faciliten las tareas de regresión.
+
+Primeramente, vamos a ver cual es el mes en el que más área se quema :
+
+Para ello primeramente ordenaremos los meses para que aparezcan de enero a diciembre y después los transformaremos en factores.
+
+```{r}
+month_order <- c("jan", "feb", "mar", "apr", "may", "jun",
+                 "jul", "aug", "sep", "oct", "nov", "dec")
+datos$month <- factor(datos$month, levels = month_order) 
+ggplot(datos, aes(x = month, y = area)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Area over Months", x = "Month", y = "Area")
+
+ggplot(datos, aes(x = month, y = area)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Area by Month", x = "Month", y = "Area")
+
+```
+
+Vemos como el mes en el que más área se quema es septiembre, seguido de agosto. También podemos ver que la mayoría de incendios cubren un área relativamente pequeña, no superando en su mayoría las 200 ha, sin embargo tenemos tres incendios muy grandes en nuestros datos, uno en julio que quemó cerca de 300 ha, uno en agosto que quemó unas 750 ha y por último, el más grande, que tuvo lugar en septiembre y quemó más de 1000 ha.
+
+De la matriz de correlaciones ya podemos extraer que ninguna variable va a tener relación alguna con nuestra variable objetivo, aun así vamos a visualizar nuestras variables frente a la variable objetivo para comprobarlo:
+
+Primeramente lo haremos con la temperatura, que es la variable que, aunque muy poca, tiene más correlación con el área
+
+```{r}
+ggplot(datos, aes(x = temp, y = area)) +
+  geom_point() +
+  labs(x = "temp", y = "area", title = "temp vs. area") +
+  theme_bw()
+
+```
+
+Vemos como no podemos extraer ninguna relación lineal entre estas variables.
+
+Podemos probar a eliminar los ceros a ver si, cuando hay un incendio, la temperatura tiene algo que ver:
+
+```{r}
+datos_filtrados <- datos %>% filter(area != 0)
+ggplot(datos_filtrados, aes(x = temp, y = area)) +
+  geom_point() +
+  labs(x = "temp", y = "area", title = "temp vs. area") +
+  theme_bw()
+
+```
+
+Vemos que, como la mayoría de los incendios que hay son pequeños, seguimos sin ver ninguna relación. A pesar de eso, destacan los dos incendios grandes que comentamos anteriormente, en los cuales se puede ver que la temperatura era mayor de 25 grados, lo cual indica una temperatura relativamente alta.
+
+Vamos a ver el resto de variables:
+
+```{r}
+plot_area_variables <- function(datos) {
+  variables <- c("FFMC", "DMC", "DC", "ISI", "RH", "wind", "rain") 
+
+  for (var in variables) {
+    p1 <- ggplot(datos, aes(x = .data[[var]], y = area)) +
+      geom_point() +
+      labs(x = var, y = "area", title = paste(var, "vs. area")) +
+      theme_bw()
+    print(p1)
+  }
+}
+plot_area_variables(datos)
+```
+
+Vemos como ninguna tiene relación lineal con la variable objetivo. Aunque si que es cierto que, a mayor FFMC, nos encontramos un mayor volumen de incendios, además de los dos grandes incendios que tenemos en el dataset.
+
+Vamos a probar de nuevo a eliminar los ceros a ver si tenemos alguna relación
+
+```{r}
+plot_area_variables <- function(datos_filtrados) {
+  variables <- c("FFMC", "DMC", "DC", "ISI", "RH", "wind", "rain") 
+
+  for (var in variables) {
+    p1 <- ggplot(datos_filtrados, aes(x = .data[[var]], y = area)) +
+      geom_point() +
+      labs(x = var, y = "area", title = paste(var, "vs. area")) +
+      theme_bw()
+    print(p1)
+  }
+}
+plot_area_variables(datos_filtrados)
+```
+
+Vemos como de nuevo no podemos extraer una relación clara entre nuestras variables y la variable objetivo. Esto significa que cuando apliquemos regresión lineal a nuestra variable objetivo, no obtendremos un modelo que pueda predecir de manera óptima. Es por ello que tendremos que hacer transformaciones de nuestras variables, para poder hacer modelos no lineales que nos ayuden a predecir mejor nuestro target. También de todas estas gráficas, podemos ver los dos incendios grandes de manera clara, ya que el valor del área es mucho más grande en estos dos casos que en los demás.
+
+## Regresión lineal
+
+Creación de funciones para evitar repetimiento.
+
+```{r}
+# Gráfico de residuos vs valores ajustados
+grafico_residuos_vs_ajustados <- function(modelo) {
+  residuos <- resid(modelo)
+  valores_ajustados <- fitted(modelo)
+  
+  ggplot(data = NULL, aes(x = valores_ajustados, y = residuos)) +
+    geom_point(color = "blue") +
+    geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+    labs(title = "Residuos vs Valores Ajustados",
+         x = "Valores Ajustados",
+         y = "Residuos") +
+    theme_minimal()
+}
+
+# Histograma de residuos
+grafico_histograma_residuos <- function(modelo) {
+  residuos <- resid(modelo)
+  
+  hist(residuos,
+     main = "Histograma de Residuos",
+     xlab = "Residuos",
+     col = "lightblue", border = "black")
+  
+  invisible(NULL)
+}
+
+# QQ-Plot de residuos
+grafico_qqplot_residuos <- function(modelo) {
+  residuos <- resid(modelo)
+  
+  qqnorm(residuos, main = "QQ-Plot de los Residuos")
+  qqline(residuos, col = "red", lwd = 2)
+}
+
+# Gráfico de residuos vs variable explicativa
+grafico_residuos_vs_variable <- function(modelo, datos, variable_explicativa) {
+  residuos <- resid(modelo)
+  
+  ggplot(data = datos, aes(x = .data[[variable_explicativa]], y = residuos)) +
+    geom_point(color = "purple") +
+    geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+    labs(title = paste("Residuos vs", variable_explicativa),
+         x = variable_explicativa,
+         y = "Residuos") +
+    theme_minimal()
+}
+```
+
+
+```{r}
+# Ajustar el modelo de regresión lineal simple
+modelo_simple <- lm(area ~ temp, data = datos)
+
+# Residuos del modelo
+residuos <- resid(modelo_simple)
+
+# Mostrar resumen del modelo
+summary(modelo_simple)
+```
+
+El análisis de regresión lineal entre la variable objetivo, "area" y la temperatura tiene un $R^2$ extremadamente bajo. Este resultado indica que la temperatura, por sí sola, apenas explica la variabilidad observada en los incendios forestales.
+
+El bajo valor del $R^2$ nos lleva a dos conclusiones: primero, que la relación lineal directa entre temperatura y área afectada es prácticamente inexistente en estos datos, segundo, que serán necesarios enfoques más complejos para modelar adecuadamente este dataset, ya que tal vez la relación no sea lineal sino de otro tipo. 
+
+También es importante considerar que la presencia mayoritaria de incendios inexistentes (valor de cero en la variable "area") esté distorsionando la capacidad predictiva del modelo. En cualquier caso, estos resultados sugieren la necesidad de explorar alternativas.
+
+
+Debido a estos resultados, para determinar qué variables meteorológicas de forma aislada tienen mayor influencia en el área quemada por los incendios forestales, vamos a calcular para cada caso el $R^2$ que nos indica el porcentaje de variabilidad explicada.
+
+```{r}
+# Lista de variables
+variables <- c("temp", "RH", "wind", "FFMC", "DMC", "DC", "ISI", "rain")
+
+# Bucle para calcular R² de cada modelo
+for (var in variables) {
+  modelo <- lm(paste("area ~", var), data = datos)
+  r2 <- summary(modelo)$adj.r.squared
+  cat("El modelo con", var, "tiene un R² de:", round(r2, 4), "\n")
+}
+```
+
+Los resultados indican que todos los modelos individuales presentan valores de $R^2$ muy bajos. Esto confirma que ninguna de las variables meteorológicas analizadas de forma aislada tiene capacidad para explicar las variaciones en los incendios forestales. Y podemos concluir que un modelo multivariable de los fenómenos de incendios puede ser más determinante que la influencia individual.
+
+A pesar de los valores bajos del $R^2$ que no resultan significativas para un modelo, hemos seleccionado como ejemplo el modelo basado en la temperatura. Esta elección se debe por ser un parámetro meteorológico fácilmente comprensible.
+
+#### **Gráfico de residuos vs valores ajustados**
+
+```{r}
+print(grafico_residuos_vs_ajustados(modelo_simple))
+```
+
+El gráfico de "Residuos vs Valores Ajustados" ayuda a identificar si la relación entre la variable explicativa y la variable respuesta es lineal y si se cumple la homocedasticidad. En este caso, se observa que los residuos no se distribuyen aleatoriamente alrededor del cero, lo que sugiere que el modelo no captura adecuadamente la relación entre las variables podría no ser lineal, indicando la posible necesidad de incorporar términos no lineales o transformaciones de variables al modelo.
+
+La dispersión de los residuos presenta heterogeneidad donde la varianza de los errores no se mantiene constante, sino que parece incrementarse levemente para predicciones mayores. Además, se identifican varios puntos alejados del grupo principal que podrían corresponder a observaciones atípicas.
+
+####  **Histograma de residuos**
+
+```{r}
+print(grafico_histograma_residuos(modelo_simple))
+```
+
+El histograma de residuos muestra la distribución de los residuos. En este caso, se observa una gran concentración de residuos cerca de cero, pero hay algunos valores atípicos que no se ajustan bien como se ha comentado anteriormente. El gráfico sugiere que las variables no siguen una distribución normal.
+
+#### **QQ-Plot de residuos**
+
+```{r}
+print(grafico_qqplot_residuos(modelo_simple))
+```
+
+El "QQ-Plot" compara la distribución de los residuos con una distribución normal. Si los puntos se alinean con la línea diagonal, los residuos siguen una distribución normal. En este caso, se observa que los residuos no siguen una distribución normal en la cola derecha.
+
+#### **Gráfico de residuos vs temperatura**
+
+```{r}
+print(grafico_residuos_vs_variable(modelo_simple, datos, "temp"))
+```
+
+Este gráfico muestra los residuos frente a la variable explicativa, "temp". Si hay un patrón claro en los residuos, esto sugiere que el modelo no está capturando adecuadamente la relación entre las variables.
+
+En este caso muestra una distribución no aleatoria de los residuos que se agrupan principalmente en la zona inferior del gráfico con una marcada dispersión que aumenta conforme lo hacen los valores de temperatura junto con la presencia de varios valores atípicos significativos Esta disposición evidencia problemas de heterocedasticidad donde la variabilidad de los residuos no es constante.
+
+#### **Prueba de Breusch-Pagan para homocedasticidad**
+
+```{r}
+breusch_pagan <- bptest(modelo_simple)
+print(breusch_pagan)
+```
+
+La prueba de Breusch-Pagan evalúa si la varianza de los residuos es constante, es decir si hay homocedasticidad. Un p-valor menor a 0.05 sugiere heterocedasticidad. En este caso, el p-valor es mayor a 0.05 lo que sugiere homocedasticidad. Sin embargo, esta conclusión contradice las conclusiones anteriores.  
+
+Esta contradicción puede explicarse por las limitaciones que presenta test de breusch-pagan cuando se trata con distribuciones asimétricas o en presencia de valores atípicos, condiciones presentes en nuestro análisis. Además, el test puede no detectar irregularidades que desde un punto de vista práctico son relevantes para la calidad del modelo.
+
+Por lo que tomamos este valor con pinzas por lo comentado y porque no creemos que el p-valor sea lo suficientemente alto para que sea verdaramente decisivo a la hora de decidir que el modelo es homocedastico.
+
+#### **Prueba de Shapiro-Wilk para normalidad de los residuos**
+
+```{r}
+shapiro_test <- shapiro.test(residuos)
+print(shapiro_test)
+```
+
+La prueba de Shapiro-Wilk evalúa si los residuos siguen una distribución normal. Un p-valor menor a 0.05 sugiere que los residuos no son normales. En este caso, el p-valor es menor a 0.05 lo que confirma las conclusiones que hemos podido sacar de los gráficos.
+
+#### **Prueba de Durbin-Watson para autocorrelación de los residuos**
+
+```{r}
+durbin_watson <- dwtest(modelo_simple)
+print(durbin_watson)
+```
+
+La prueba de Durbin-Watson evalúa si los residuos están autocorrelacionados. Un valor cercano a 2 sugiere que no hay autocorrelación. En este caso, el estadístico es menor a 0.05 lo que sugiere autocorrelación.
+
+#### **Distancia de Cook**
+
+A lo largo del EDA y del diágnostico se ha notado la presencia de valores atípicos que pueden distorsionar los resultados del modelo. La Distancia de Cook es una métrica que nos permite identificar estos puntos problemáticos, midiendo cómo cambian los coeficientes de regresión y las predicciones cuando se excluye cada observación. Al aplicar este diagnóstico, buscamos garantizar que nuestras conclusiones no estén siendo influenciadas por observaciones inusuales, sino que verdaderamente reflejen las relaciones en los datos.
+
+```{r}
+n <- nrow(datos)  # Número de observaciones
+
+# Calcular la Distancia de Cook
+cooks_distance <- cooks.distance(modelo_simple)
+
+# Calcular umbral
+cooks_threshold <- 4/n
+
+# Graficar la distacia de Cook
+plot(cooks_distance,
+     main = "Distancia de Cook",
+     xlab = "Índice de Observación",
+     ylab = "Distancia de Cook",
+     pch = 19, col = "blue", ylim=c(min(cooks_distance)*.9,max(cooks_distance)*1.05))
+abline(h = cooks_threshold, col = "red", lwd = 2, lty = 2)
+text(which(cooks_distance > cooks_threshold), cooks_distance[cooks_distance > cooks_threshold],
+     labels = which(cooks_distance > cooks_threshold), pos = 3, col = "red")
+```
+
+```{r}
+cat("Observaciones influyentes:\n")
+print(which(cooks_distance > cooks_threshold))
+```
+
+La Distancia de Cook ha identificado siete observaciones influyentes en nuestro modelo de regresión lineal. Entre estos, destacan especialmente las observaciones 239 y 416 que como se puede ver en el gráfico tienen un gran impacto en los resultados del modelo y  cuestionan la robustez del modelo. 
+
+Estas dos observaciones se pueden deber a incendios extremadamente grandes frente al resto o podrían indicar errores de medición, esta situación nos obliga a cuestionar la validez de los resultados. Es interesante quitar estas observaciones y compararlo con el modelo original.
+
+```{r}
+# Identificar observaciones influyentes
+outliers <- which(cooks_distance > cooks_threshold)
+
+# Crear nuevo dataset sin outliers
+datos_sin_outliers <- datos[-outliers, ]
+
+# Ajustar modelo sin outliers
+modelo_sin_outliers <- lm(area ~ temp, data = datos_sin_outliers)
+
+# Mostrar resumen del modelo
+summary(modelo_sin_outliers)
+```
+
+El modelo con la eliminación de los outliers sigue sin ser significativo. Otro problema con los datos que puede estar alterando los datos es la abundancia de ceros. Para verificar este efecto, vamos a realizar un modelo que excluya estos casos, lo que nos permitirá evaluar cómo los efectos meteorológicos afectan el tamaño de los incendios cuando estos ocurren. 
+
+## Repetir el proceso para el modelo sin ceros en "area"
+
+```{r}
+# Filtrar datos sin ceros en "area"
+datos2 <- datos[datos$area > 0, ]
+
+# Ajustar el modelo de regresión lineal simple sin ceros
+modelo_simple2 <- lm(area ~ temp, data = datos2)
+
+# Residuos del modelo
+residuos2 <- resid(modelo_simple2)
+
+# Mostrar resumen del segundo modelo
+summary(modelo_simple2)
+```
+
+Observamos que el valor del $R^2$ entre la variable "area" y la temperatura ha  mejorado ligeramente en comparación con los modelos que incluían todos los datos. Sin embargo, esta mejora del valor sigue siendo extremadamente bajo, por lo que vamos volver a calcular para cada caso el $R2$ y compararlos
+
+```{r}
+# Bucle para calcular R**2 de cada modelo
+for (var in variables) {
+  modelo2 <- lm(paste("area ~", var), data = datos2)
+  r2 <- summary(modelo2)$adj.r.squared                   
+  cat("El modelo con", var, "tiene un R² de:", round(r2, 4), "\n")
+}
+```
+
+Incluso tras quitar las observaciones con área cero, los $R^2$ siguen siendo extremadamente bajos, confirmando que ningún predictor individual explica significativamente la variación de los incendios. 
+
+Aunque los resultados no son significativos, vamos a revisar el modelo entre "area" y la temperatura por si los supuestos se cumplen o por lo menos tienen una mejora significativa.
+
+#### **Gráfico de residuos vs valores ajustados sin ceros**
+
+```{r}
+print(grafico_residuos_vs_ajustados(modelo_simple2))
+```
+
+Los residuos siguen sin distribuirse de forma aleatoriamente alrededor del cero por lo que el modelo no captura adecuadamente la relación entre la variable explicativa y la variable respuesta.
+
+#### **Histograma de residuos sin ceros**
+
+```{r}
+print(grafico_histograma_residuos(modelo_simple2))
+```
+
+El análisis del histograma de residuos tras eliminar las observaciones con área cero revela una ligera mejora en la distribución,, pero sigue teniendo problemas de normalidad. 
+
+#### **QQ-Plot de residuos sin ceros**
+
+```{r}
+print(grafico_qqplot_residuos(modelo_simple2))
+```
+
+En este caso, se observa que los residuos no siguen una distribución normal, especialmente en la cola derecha. Esto coincide con lo observado en el histograma de residuos y refuerzan las limitaciones del enfoque de regresión lineal.
+
+#### **Gráfico de residuos vs temperatura sin ceros**
+
+```{r}
+print(grafico_residuos_vs_variable(modelo_simple2, datos2, "temp"))
+```
+
+Los residuos siguen agrupados en la zona inferior del gráfico evidenciando problemas de heterocedasticidad. La persistencia de estos problemas tras eliminar los ceros sugiere que las limitaciones del modelo van más allá de la distribución inicial de los datos.
+
+
+Los modelos lineales simples no son los indicados para intentar predecir el area de un incendio, este hecho era algo previsible ya que los incendios son fenómenos meteorológicos complejos que dependen de muchos factores. Para intentar mejorar la predicción vamos a implementar un modelo de regresión lineal múltiple.
+
+## Modelo de regresión lineal múltiple
+
+```{r}
+# Ajuste del modelo completo
+modelo_multiple <- lm(area ~ temp + RH + wind + FFMC + DMC + DC + ISI + rain, data = datos)
+
+# Obtener los residuos
+residuos_multiple <- resid(modelo_multiple)
+
+# Resumen estadístico
+summary(modelo_multiple)
+```
+Despues de probar muchas combinaciones de variables, nos hemos dado cuenta que ninguna combinación tiene significancia importante en un modelo lineal múltiple, por lo que haremos un modelo que incorpora variables meteorológicas e índices FWI. Aunque el análisis exploratorio mostró relaciones débiles y no lineales con el área quemada, incluimos todas las variables potencialmente relevantes para evaluar sus efectos combinados.
+
+Al final, este modelo nos sirve como punto de partida para demostrar que necesitamos enfoques diferentes que puedan captar mejor cómo funcionan realmente los incendios forestales.
+
+#### **Gráfico de residuos vs valores ajustados **
+
+```{r}
+print(grafico_residuos_vs_ajustados(modelo_multiple))
+```
+
+En el gráfico de "Residuos vs Valores Ajustados" se observa que tal y como ocurria en el modelo lineal los residuos no se distribuyen aleatoriamente alrededor del cero y la dispersión de los residuos es heterogenia con una varianza que se incrementa a medida que los valores ajustados aumentan. 
+
+#### **Histograma de residuos**
+
+```{r}
+print(grafico_histograma_residuos(modelo_multiple))
+```
+
+#### **QQ-Plot de residuos**
+
+```{r}
+print(grafico_qqplot_residuos(modelo_multiple))
+```
+
+Al histograma de residuos y al El "QQ-Plot" les ocurre lo mismo que al modelo simple, al primero gran concentración de residuos cerca del cero y con presencia de valores atípicos, en el segundo los residuos no siguen una distribución normal en la cola derecha. Ambos sugieren que no se sigue una distribución normal.
+
+#### **Prueba de Breusch-Pagan para homocedasticidad**
+
+```{r}
+breusch_pagan <- bptest(modelo_multiple)
+print(breusch_pagan)
+```
+
+El p-valor es mayor a 0.05 al igual que en el modelo lineal simple lo que sugiere homocedasticidad. Sin embargo, esta conclusión contradice las conclusiones anteriores. La gran diferencia en este caso es que esta vez el p-valor es diez veces mayor al anterior, por lo tanto es mucho mayor a 0.05.
+Pero como se ha comentado este test no es especialmente bueno cuando trata con distribuciones asimétricas o en presencia de valores atípicos. Por lo que este valor no es determinante frente a las suposiciones sacadas de los gráficos.
+
+#### **Prueba de Shapiro-Wilk para normalidad de los residuos**
+
+```{r}
+shapiro_test <- shapiro.test(residuos_multiple)
+print(shapiro_test)
+```
+
+Con la prueba de Shapiro-Wilk comprobamos que el p-valor es menor a  0.05 lo que confirma las conclusiones que hemos podido sacar de los gráficos de que el modelo no sigue una distribución normal.
+
+#### **Prueba de Durbin-Watson para autocorrelación de los residuos**
+
+```{r}
+durbin_watson <- dwtest(modelo_multiple)
+print(durbin_watson)
+```
+
+El p-valor de la prueba de Durbin-Watson es menor a 0.05, por lo tanto los residuos del modelo son autocorrelados. Hemos podido comprobar que al igual que pasaba con el modelo de regresión lineal simple, el modelo lineal múltiple no cumplen los supuestos. 
+
+
+Los resultados obtenidos incumplen los supuestos, al tener problemas de normalidad de los residuos, la heterocedasticidad detectada y la escasa capacidad explicativa de los modelos, así como los valores extremadamente bajos del R² demuestran que los modelos de regresión lineal presentan serias limitaciones para analizar este conjunto de datos.
+
+Es evidente que necesitamos intentar enfoques más flexibles que puedan adaptarse mejor a las características particulares de estos datos. Las transformaciones no lineales de las variables o la implementación de modelos diseñados para manejar distribuciones asimétricas y valores extremos pueden crear modelos que permitan una interpretación más clara y mejorar la capacidad predictiva.
+
+
+## Selección de variables y regularización
+
+## Modelos no lineales
+
+De los modelos lineales claramente no podemos extraer demasiadas conclusiones ni hacer predicciones precisas ya que las relaciones de nuestra variable objetivo con el resto de las variables no son lineales. Es por ello que debemos utilizar modelos con transformaciones no lineales para conseguir una mejor predicción.
+
+Primeramente utilizaremos regresión polinómica
+
+#### **Modelos polinómicos**
+```{r}
+set.seed(123)
+# ajuste del modelo polinómico de grado 2
+modelo_polinomico <- lm(datos$area ~ poly(datos$temp,2))
+summary(modelo_polinomico)
+
+plot(datos$temp, datos$area, main = "Regresión polinómica de segundo grado", pch = 19)
+lines(datos$temp, predict(modelo_polinomico), col = "red", lwd = 2)
+
+par(mfrow = c(2, 2))
+plot(modelo_polinomico)
+```
+
+De la tabla podemos ver que hacer un modelo polinómico no merece la pena, ya que nos indica que solamente es relevante el primer grado del polinomio, es decir, un modelo lineal es preferible sobre el modelo polinómico de grado dos. Asimismo, podemos ver como los residuos no siguen una distribución normal, ya que el valor de casi todos es 0. Además, nuestro r\^2 es de 0.00743, lo cual nos indica que nuestro modelo no predice bien.
+
+Podemos probar eliminando los ceros para predecir qué pasa hay un incendio:
+
+```{r}
+set.seed(123)
+df_filtered <- datos %>% filter(area != 0)
+# ajuste del modelo polinómico de grado 2
+modelo_polinomico <- lm(df_filtered$area ~ poly(df_filtered$temp,2))
+summary(modelo_polinomico)
+
+plot(df_filtered$temp, df_filtered$area, main = "Regresión Polinómica de Segundo Grado", pch = 19)
+lines(df_filtered$temp, predict(modelo_polinomico), col = "red", lwd = 2)
+
+par(mfrow = c(2, 2))
+plot(modelo_polinomico)
+```
+
+Vemos como eliminar los ceros no nos ayuda, ya que la mayoría de los incendios son pequeños y seguimos sin tener unos residuos normales. El eliminar los ceros hace que la variable temperatura tenga menor importancia aún, con un p valor mayor de 0.05, también aumenta nuestro error residual y disminuye nuesto R², por lo que podemos decir que eliminar todos estos valores hace que nuestro modelo sea peor.
+
+Podemos utilizar splines para intentar, utilizando modelos polinómicos distintos para cada tramo, ajustar mejor nuestro modelo. Para ello dividimos por cuartiles 
+
+#### **Modelo splines**
+```{r}
+# vamos a dividirlo por cuartiles 
+modelo_spline_bs <- lm(datos$area ~ bs(datos$temp, knots = quantile(datos$temp, c(0.25, 0.5, 0.75))))
+summary(modelo_spline_bs)
+par(mfrow = c(2, 2))
+plot(modelo_spline_bs)
+```
+Vemos que hacer splines mejora ligeramente el ajuste de nuestro modelo (nuestro R² ha aumentado ligeramente), aunque sigue sin ser un buen modelo, los residuos no cumplen las condiciones y predice sin precisión alguna. 
+
+
+Como hemos podido ver, un modelo polinómico no es mejor que un modelo lineal para nuestros datos, es por ello que vamos a utilizar un modelo logarítmico, sumando 1 a nuestra variable objetivo ya que tenemos ceros en esta y si no, no existirá el logaritmo. Además, la transformación logarítmica nos ayuda a lidiar con los dos outliers que tenemos, haciendo que influyan menos en el modelo:
+
+#### **Modelos logarítmicos**
+```{r}
+# transformamos nuestra variable objetivo con un logaritmo
+set.seed(123)
+log_area <- log(datos$area + 1)
+modelo_log <- lm(log_area ~ datos$temp)
+summary(modelo_log)
+plot(modelo_log)
+```
+
+Del resumen del modelo podemos ver como la variable temperatura no es importante en este modelo, además, nuestro R² es muy bajo, lo cual nos dice que nuestro modelo no predice con precisión.
+
+Podemos ver como nuestros residuos no cumplen las condiciones necesarias, no siguen una distribución normal. Aun así vamos a comprobar la normalidad, independencia y homocedasticidad
+
+```{r}
+ggplot() +
+  geom_histogram(aes(x = modelo_log$residuals), bins = 30, fill = "lightblue", color = "black") +
+  labs(title = "Histogram of Residuals", x = "Residuals", y = "Frequency") +
+  theme_minimal()
+```
+
+Vemos que claramente los residuos no son normales, comprobamos la homocedasticidad con el test de Breusch-Pagan
+
+```{r}
+bptest(modelo_log)
+```
+
+Como el p-valor es mayor de 0.05, no podemos rechazar la hipótesis nula por lo que no hay evidencia para rechazar que nuestros residuos sean homocedásticos.
+
+Vamos a probar a eliminar los ceros con el modelo logarítmico para ver si conseguimos unos residuos que sigan una distribución normal.
+
+```{r}
+log_area_filt <- log(df_filtered$area + 1)
+modelo_log_2 <- lm(log_area_filt ~ df_filtered$temp)
+summary(modelo_log_2)
+plot(modelo_log_2)
+```
+
+Podemos ver como la distribución de los residuos al haber eliminado los ceros es algo mejor, aunque sigue sin seguir una distribución normal. También vemos como la qq-plot se ajusta mucho mejor que en el modelo anterior, dando indicios de que los residuos son mas normales que con los ceros. A pesar de esto, nuestro R² es negativo, indicandonos que nuestro modelo no es bueno.
+
+Comprobamos la homocedasticidad de los residuos:
+
+```{r}
+bptest(modelo_log_2)
+```
+
+Vemos que los residuos no son homocedásticos, vamos a ver si siguen una distribución normal:
+
+```{r}
+ggplot() +
+  geom_histogram(aes(x = modelo_log_2$residuals), bins = 30, fill = "lightblue", color = "black") +
+  labs(title = "Histogram of Residuals", x = "Residuals", y = "Frequency") +
+  theme_minimal()
+```
+
+```{r}
+shapiro.test(modelo_log_2$residuals)
+```
+
+El p-valor es menor de 0.05, por lo que rechazamos la hipótesis nula de normalidad de los residuos.
+
+Vamos a probar a utilizar otra variable que no sea la temperatura, en este caso utilizaremos ISI. Si la utilizamos en un modelo con todos los ceros, vemos como el modelo es malo, pero vamos a probar a ver qué pasa cuando los eliminamos y utilizamos dicha variable:
+
+```{r}
+log_area_filt <- log(df_filtered$area + 1)
+modelo_log_3 <- lm(log_area_filt ~ df_filtered$ISI)
+summary(modelo_log_3)
+plot(modelo_log_3)
+```
+
+```{r}
+bptest(modelo_log_3)
+```
+
+Los residuos son homocedásticos, comprobamos su normalidad:
+
+```{r}
+shapiro.test(modelo_log_3$residuals)
+
+```
+
+Vemos que claramente no van a seguir una distribución normal.
+
+```{r}
+ggplot() +
+  geom_histogram(aes(x = modelo_log_3$residuals), bins = 30, fill = "lightblue", color = "black") +
+  labs(title = "Histogram of Residuals", x = "Residuals", y = "Frequency") +
+  theme_minimal()
+```
+
+Vemos como los residuos son similares, no son homocedásticos ni normales en este caso, aunque en este caso nuestra variable es más relevante que en el caso anterior, a pesar de eso, sigue sin ser realmente relevante en la predicción. El R² es considerablemente mejor, sobre todo es positivo. A pesar de esto, sigue siendo un mal modelo, que no es capaz de predecir con precisión y no nos sirve ya que los residuos del modelo no son normales ni homocedásticos, a pesar de que sea mejor prediciendo.
+
+A continuación vamos a probar una transformación Yeo-Johnson, esta transformación es un caso particular de la transformación box-cox pero particularmente interesante para datos con valores tanto positivos como negativos, incluyendo el cero, lo cual es particularmente interesante en nuestro caso concreto. Esta transformación busca mejorar la normalidad de los datos, además de reducir la asimetría de los mismos y es capaz de manejar los ceros de nuestro dataset.
+
+Primeramente vamos a probarlo con los datos completos, sin quitar los ceros y más adelante lo haremos con los datos que no son cero.
+
+En este caso utilizamos la variable temperatura que en modelos con ceros es la que mejores predicciones nos da
+
+#### **Modelos Yeo-Johnson**
+```{r}
+
+# Aplicar la transformación Yeo-Johnson
+trans1 <- powerTransform(datos$area, family = "yjPower")
+trans2 <- powerTransform(datos$temp, family = "yjPower")
+lambda1 <- trans1$roundlam
+round(lambda1, 1)
+lambda2 <- trans2$roundlam
+round(lambda2, 1)
+area_trans <- yjPower(datos$area, lambda1)
+temp_trans <- yjPower(datos$temp, lambda2)
+modelo_yeo_johnson <- lm(area_trans ~  temp_trans)
+summary(modelo_yeo_johnson)
+plot(modelo_yeo_johnson)
+```
+
+Vemos como no es un buen modelo, nuestro R² es muy pequeño y nuestros residuos no son lineales, los ceros siguen teniendo mucha influencia en el modelo e impiden predecir correctamente, y el ajuste a la qq-plot es muy malo, por lo que podemos concluir que el modelo en si es malo y no nos serviría.
+
+Vamos a probar a eliminar los ceros, vamos a hacerlo de nuevo con la temperatura:
+
+```{r}
+df_filtered <- datos %>% filter(area != 0)
+
+# Aplicar la transformación Yeo-Johnson
+trans1 <- powerTransform(df_filtered$area, family = "yjPower")
+trans2 <- powerTransform(df_filtered$temp, family = "yjPower")
+lambda1 <- trans1$roundlam
+round(lambda1,1)
+lambda2 <- trans2$roundlam
+round(lambda2,1)
+area_trans_2 <- yjPower(df_filtered$area, lambda1)
+temp_trans_2 <- yjPower(df_filtered$temp, lambda2)
+modelo_yeo_johnson_2 <- lm(area_trans_2 ~  temp_trans_2 )
+summary(modelo_yeo_johnson_2)
+plot(modelo_yeo_johnson_2)
+```
+
+Comprobamos la homocedasticidad de los residuos:
+
+```{r}
+bptest(modelo_yeo_johnson_2)
+```
+
+Vemos que en este caso los residuos no son homocedásticos, por lo que los residuos no cumplen las condiciones.
+
+```{r}
+shapiro.test(modelo_yeo_johnson_2$residuals)
+```
+
+Tampoco son normales, aunque están cerca de serlo
+
+```{r}
+ggplot() +
+  geom_histogram(aes(x = modelo_yeo_johnson_2$residuals), bins = 30, fill = "lightblue", color = "black") +
+  labs(title = "Histogram of Residuals", x = "Residuals", y = "Frequency") +
+  theme_minimal()
+```
+
+Vemos que son my similares a una distribución normal. A pesar de esto, como no son homocedásticos no es un modelo que nos sirva. Además, en el resumen del modelo vemos como tenemos un R² negativo, lo cual nos dice que el modelo no es bueno
+
+Vamos a hacer de nuevo el modelo con la transformación yeo-johnson pero en esta ocasión con la variable ISI, la cual nos da mejores predicciones una vez eliminamos los ceros del df
+
+```{r}
+trans1 <- powerTransform(df_filtered$area, family = "yjPower")
+trans3 <- powerTransform(df_filtered$ISI, family = "yjPower")
+lambda1 <- trans1$roundlam
+round(lambda1,1)
+lambda3 <- trans3$roundlam
+round(lambda3,1)
+area_trans_2 <- yjPower(df_filtered$area, lambda1)
+ISI_trans_2 <- yjPower(df_filtered$ISI, lambda3)
+modelo_yeo_johnson_3 <- lm(area_trans_2 ~  ISI_trans_2 )
+summary(modelo_yeo_johnson_3)
+plot(modelo_yeo_johnson_3)
+```
+
+Comprobamos la homocedasticidad de los residuos:
+
+```{r}
+bptest(modelo_yeo_johnson_3)
+```
+
+Podemos ver cómo los residuos no son homocedásticos pero están muy cerca de serlo. Comprobamos ahora la normalidad de los mismos:
+
+```{r}
+shapiro.test(modelo_yeo_johnson_3$residuals)
+```
+
+Vemos que no son normales, aun así vamos a verlo con un histograma
+
+```{r}
+ggplot() +
+  geom_histogram(aes(x = modelo_yeo_johnson_3$residuals), bins = 30, fill = "lightblue", color = "black") +
+  labs(title = "Histogram of Residuals", x = "Residuals", y = "Frequency") +
+  theme_minimal()
+```
+
+Aquí vemos como los residuos son bastante similares a una distribución normal
+
+Este modelo podría servirnos. Los residuos están bastante cerca de seguir una distribución normal y de ser homocedásticos, algo que no habíamos conseguido con ningún modelo anterior, ni lineal ni no lineal.
+
+Vamos a comparar nuestros modelos no lineales. Para ello vamos a utilizar distintas métricas como el R² ajustado o el AIC:
+
+#### **Comparativa de modelos no lineales**
+
+```{r}
+# Creamos una lista con todos los modelos
+model_list <- list(
+  modelo_yeo_johnson = modelo_yeo_johnson,
+  modelo_yeo_johnson2 = modelo_yeo_johnson_2,
+  modelo_yeo_johnson3 = modelo_yeo_johnson_3,
+  modelo_log = modelo_log,
+  modelo_log2 = modelo_log_2,
+  modelo_log3 = modelo_log_3,
+  modelo_polinomico = modelo_polinomico,
+  modelo_splinebs = modelo_spline_bs
+)
+
+comparison_results <- compare_performance(model_list)
+print(comparison_results)
+plot(comparison_results)
+```
+
+
+Podemos ver en esta gráfica como el modelo de los splines tiene el R² sin ajustar más alto, aunque en el resto de métricas no es tan bueno y los residuos no cumplen las condiciones necesarias, por lo que tampoco sería un modelo válido. también podemos ver como el modelo con la transformación Yeo-Johnson eliminando los ceros y utilizando ISI tiene el R² ajustado más alto, por lo que el ajuste es mejor en este modelo. A pesar de esto, tiene también el valo más alto de RMSE, lo cual nos dice que tiene muchos residuos, en este caso el mejor modelo es el polinómico. En cuanto al AIC y BIC, el mejor modelo también es el Yeo-Johnson, esto se debe a que nuestra gráfica muestra los pesos derivados del AIC y BIC, no los valores, si fueran los valores, cuanto más bajos mejor, sin embargo en este caso al tratarse de los pesos, cuanto más grandes mejor. Teniendo todo esto en cuenta, además del análisis anterior de los residuos de cada uno de los modelos, podemos decir que el modelo con la transformación yeo-johnson eliminando ceros y utilizando la variable ISI es el mejor, al menos en cuanto a la distribución y características de los resíduos y el R², tanto el ajustado como el normal.
+
+## Conclusiones
+
+Los modelos de regresión lineal, tanto simple como múltiple, son ineficaces a la hora de predecir nuestros datos de incendios forestales. La capacidad explicativa de estos modelos resulta ser extremadamente baja. Este bajo rendimiento se debe a los valores de la variable objetivo, donde la mayoría de observaciones presentan valores nulos o mínimos de área quemada, mientras que unos pocos incendios extremos afectan las relaciones lineales.
+
+Un análisis más profundo revela que los modelos lineales incumplen varios de sus supuestos fundamentales. Los residuos no siguen una distribución normal, muestran patrones de heterocedasticidad y están fuertemente influenciados por valores atípicos, como evidencian las altas distancias de Cook asociadas a los incendios de mayor magnitud. En el caso de la regresión múltiple, la presencia de multicolinealidad entre variables climáticas dificulta la interpretación de los coeficientes individuales.
+
+Estos hallazgos sugieren que el enfoque lineal no es adecuado para este tipo de problemas meteorológicos donde predominan distribuciones asimétricas y eventos extremos. La falta de ajuste de estos modelos justifica la exploración de alternativas no lineales y métodos específicamente diseñados para manejar datos con exceso de ceros.
+
+
+En cuanto a los modelos no lineales, vemos como el desbalance de los datos (muchos ceros y valores pequeños), afecta mucho a las predicciones. Todos los modelos no lineales que hemos hecho, independientemente de la transformación que hagamos de las variables, son muy poco precisos, aunque es cierto que con varias de estas transformaciones conseguimos que los residuos de los modelos se acerquen mucho más a las condiciones necesarias que con modelos lineales. En el caso del modelo Yeo-Johnson sin ceros conseguimos un R² ajustado "alto" en comparación con otros modelos que hemos probado, además de conseguir buenas métricas en el resto de aspectos en comparación con los demás modelos. También con este modelo hemos conseguido tener unos residuos cerca de ser normales y homocedásticos según nuestros contrastes de hipótesis, por lo que podemos considerar que este modelo es el mejor dentro de los que hemos probado, sin ser realmente útil, ni poder predecir el área de los incendios. 
+
+Este trabajo podría mejorar cambiando varios aspectos que se deberán tratar a futuro. El primero es la calidad misma de los datos. Al tener tan pocas observaciones y, sobre todo, que una gran cantidad de las mismas sean ceros o valores muy cercanos a cero, hace que no podamos elaborar un modelo de calidad con las herramientas que tenemos en este momento. Para tratar esto, se podrían simular incendios con un simulador, teniendo en cuenta diferentes condiciones de viento, temperatura o las distintas variables que tenemos. Esto nos proporcionaría una mayor variedad de incendios con diferentes áreas, lo cual haría que el peso que tienen estos ceros no fuera tan grande. 
+
+Por otra parte, sin tocar los datos, podríamos desarrollar un modelo ensamblado, combinando un modelo de clasificación para clasificar entre área cero y área distinta de cero, con un modelo de regresión para predecir el área sabiendo que ha habido un incendio y que esta no va a ser cero. Este método sería interesante aplicarlo de cara a la siguiente entrega, pero además sería interesante utilizar otros métodos de regresión para predecir el área cuando hay un incendio, ya que como hemos visto, los aplicados en esta práctica no son nada buenos prediciendo el área. Para eso sería interesante utilizar un modelo de regresión binomial negativa, una poisson redondeando al entero o una regresión gamma, las cuales funcionan mejor que los métodos que hemos utilizado en aquellas situaciones en las que tenemos muchos ceros o valores con mucha desviación como es nuestro caso. 
+
+Siguiendo la linea de utilizar un modelo con dos partes, también podría ser interesante utilizar un modelo hurdle, este tipo de modelo nos ayudaría a predecir la probabilidad de que el área sea cero con un modelo logístico o probabilístico y haríamos una predicción del área con una poisson, una binomial negativa o una regresión gamma. 
+
+Por último, y saliéndose un poco del *scope* de la asignatura, los autores del artículo original del que probiene el dataset, recomiendan utilizar un modelo SVM gausiano con las condiciones meteorológicas, lo cual hace que los incendios pequeños (que son la mayoría) sean predichos mejor, aunque seguiría teniendo problema con los atípicos, aquellos incendios grandes que no se producen por unas condiciones en particular. 
+
+
+# Parte 2
+
+## Binomial negativa
+
+```{r}
+library(MASS)
+modelo_binom_neg <- glm.nb(area ~ DMC+ ISI +temp+RH+wind, data = datos)
+summary(modelo_binom_neg)
+```
+```{r}
+cat("Dispersión en Binomial Negativa:", modelo_binom_neg$theta, "\n")
+```
+
+```{r}
+plot(residuals(modelo_binom_neg, type = "deviance"))
+plot(modelo_binom_neg)
+```
+
+
+## Modleo Gamma
+```{r}
+log_area = datos$area+1
+```
+
+
+```{r}
+modelo_gamma <- glm(log_area ~ DMC+ ISI +temp+RH+wind+day,data = datos, family = Gamma(link = "log"))
+summary(modelo_gamma)
+```
+
+```{r}
+plot(modelo_gamma)
+```
+
+
+## Modelo GAMs
+
+```{r}
+library(mgcv)
+```
+
+### Modelo GAM básico
+
+```{r}
+gam1 <- gam(area ~ s(temp) + s(RH) + s(wind) + s(FFMC), 
+            data = datos, 
+            family = gaussian(link = "log"))
+summary(gam1)
+```
+
+```{r}
+gam2 <- gam(area ~ s(temp) + s(RH) + s(wind) + s(FFMC) + s(DMC) + s(DC) + s(ISI) + rain,
+            data = datos,
+            family = gaussian(link = "log"))
+summary(gam2)
+```
+
+```{r}
+gam3 <- gam(area ~ s(temp, RH) + s(wind, FFMC) + s(DMC, DC) + s(ISI) + rain,
+            data = datos,
+            family = gaussian(link = "log"))
+summary(gam3)
+```
+
+## Modelo GAM sin ceros
+
+```{r}
+gam4 <- gam(area ~ s(temp) + s(RH) + s(wind) + s(FFMC) + s(DMC) + s(DC) + s(ISI) + rain,
+            data = datos2,
+            family = Gamma(link = "log"))  
+summary(gam4)
+```
+
+## Modelo GAM con selección de variables
+
+```{r}
+gam5 <- gam(area ~ s(temp) + s(RH) + s(wind) + s(FFMC) + s(DMC) + s(DC) + s(ISI) + rain,
+            data = datos,
+            family = gaussian(link = "log"),
+            select = TRUE)  # Permite selección de variables
+summary(gam5)
+```
+
+
+
+
+
+
+## Ver como afectan las variables según las coordenadas
+
+```{r}
+ggplot(datos, aes(x = X, y = Y, fill = area)) + 
+  geom_tile() + 
+  scale_fill_gradient(low = "yellow", high = "red") +
+  labs(title = "Mapa de calor del área quemada por coordenadas")
+```
+
+```{r}
+ggplot(datos, aes(x = X, y = Y, color = temp, size = area)) +
+  geom_point(alpha = 0.6) +
+  scale_color_gradient(low = "blue", high = "red") +
+  labs(title = "Distribución espacial: Temperatura vs Área quemada")
+```
+
+```{r}
+gam_espacial <- gam(area ~ s(temp) + s(X, Y, k = 20) + s(FFMC),
+                   data = datos,
+                   family = gaussian(link = "log"))
+summary(gam_espacial)
+```
+```{r}
+table(datos$X,datos$Y)
+```
+
+
+```{r}
+library(leaflet)
+library(leaflet.extras)
+
+leaflet(datos) %>% 
+  addTiles() %>% 
+  addHeatmap(
+    lng = ~X,        # Usamos X como longitud (si son coordenadas reales)
+    lat = ~Y,        # Usamos Y como latitud
+    intensity = ~area,
+    radius = 10,      # Controla el tamaño de los puntos de calor
+    blur = 15,        # Suaviza la transición entre puntos
+    minOpacity = 0.1, # Opacidad mínima (para áreas de baja intensidad)
+    max = max(datos$area, na.rm = TRUE)  # Escala el valor máximo de intensidad
+  )
+```
+
+```{r}
+# Crear una columna month_num
+datos$month_num <- as.numeric(factor(datos$month, levels = c("jan","feb","mar","apr","may","jun",
+                                                           "jul","aug","sep","oct","nov","dec")))
+```
+
+
+```{r}
+gam_time <- gam(area ~ s(temp) + te(X, Y, month_num, k = c(5, 5, 6)),
+                data = datos,
+                family = gaussian(link = "log"))
+summary(gam_time)
+```
+
+
+```{r}
+gam_time_better <- gam(area ~ s(temp) + 
+                   ti(X, Y, k = 5) +          # Efecto espacial
+                   ti(month_num, k = 6) +      # Efecto temporal
+                   ti(X, Y, month_num, k = c(5, 5, 6)),  # Interacción
+                 data = datos,
+                 family = gaussian(link = "log"))
+summary(gam_time_better)
+```
+
+```{r}
+plot(gam_time_better, select = 3)  # Para ver el efecto ti(month_num)
+```
+

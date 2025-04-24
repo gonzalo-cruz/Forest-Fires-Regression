@@ -84,6 +84,7 @@ library(GGally)
 library(car)
 library(performance)
 library(splines)
+library(mgcv)
 datos <- read.csv("forestfires.csv", sep=",", header=TRUE)
 ```
 
@@ -1307,10 +1308,6 @@ plot(modelo_gamma)
 
 ## Modelo GAMs
 
-```{r}
-library(mgcv)
-```
-
 ### Modelo GAM básico
 
 ```{r}
@@ -1334,15 +1331,6 @@ gam3 <- gam(area ~ s(temp, RH) + s(wind, FFMC) + s(DMC, DC) + s(ISI) + rain,
 summary(gam3)
 ```
 
-## Modelo GAM sin ceros
-
-```{r}
-gam4 <- gam(area ~ s(temp) + s(RH) + s(wind) + s(FFMC) + s(DMC) + s(DC) + s(ISI) + rain,
-            data = datos2,
-            family = Gamma(link = "log"))  
-summary(gam4)
-```
-
 ## Modelo GAM con selección de variables
 
 ```{r}
@@ -1353,10 +1341,25 @@ gam5 <- gam(area ~ s(temp) + s(RH) + s(wind) + s(FFMC) + s(DMC) + s(DC) + s(ISI)
 summary(gam5)
 ```
 
+```{r}
+plot(gam5)
+```
 
 
+```{r}
+plot(gam5, 
+     residuals = TRUE,  
+     pch = 19,          
+     col = "blue",     
+     seWithMean = TRUE, 
+     rug = TRUE)
+```
 
 
+```{r}
+par(mfrow = c(2, 2))
+gam.check(gam5)
+```
 
 ## Ver como afectan las variables según las coordenadas
 
@@ -1375,59 +1378,48 @@ ggplot(datos, aes(x = X, y = Y, color = temp, size = area)) +
 ```
 
 ```{r}
-gam_espacial <- gam(area ~ s(temp) + s(X, Y, k = 20) + s(FFMC),
-                   data = datos,
-                   family = gaussian(link = "log"))
-summary(gam_espacial)
-```
-```{r}
 table(datos$X,datos$Y)
 ```
 
 
 ```{r}
-library(leaflet)
-library(leaflet.extras)
+df1=datos[(datos$X==8 & datos$Y==6),]
+table(df1$area)
+y=df1$area>0
+modelo1=glm(y~df1$temp)
 
-leaflet(datos) %>% 
-  addTiles() %>% 
-  addHeatmap(
-    lng = ~X,        # Usamos X como longitud (si son coordenadas reales)
-    lat = ~Y,        # Usamos Y como latitud
-    intensity = ~area,
-    radius = 10,      # Controla el tamaño de los puntos de calor
-    blur = 15,        # Suaviza la transición entre puntos
-    minOpacity = 0.1, # Opacidad mínima (para áreas de baja intensidad)
-    max = max(datos$area, na.rm = TRUE)  # Escala el valor máximo de intensidad
-  )
-```
 
-```{r}
-# Crear una columna month_num
-datos$month_num <- as.numeric(factor(datos$month, levels = c("jan","feb","mar","apr","may","jun",
-                                                           "jul","aug","sep","oct","nov","dec")))
 ```
+Hacer exponenecial de estimate en valor absoluto, si el valor original es negativo "protege" de un incendio si es positivo "favorece" un incendio
+
+
+
+
+
+
+Ir probando areas y hacer esto
 
 
 ```{r}
-gam_time <- gam(area ~ s(temp) + te(X, Y, month_num, k = c(5, 5, 6)),
-                data = datos,
-                family = gaussian(link = "log"))
-summary(gam_time)
+modelo1=glm(y~(df1$temp>25) + (df1$RH<80))
+summary(modelo1)
+p1=predict(modelo1,type="response")
+hist(p1)
+table(p1>0.5,y)
 ```
+
+
+
+
+
+
+
+
 
 
 ```{r}
-gam_time_better <- gam(area ~ s(temp) + 
-                   ti(X, Y, k = 5) +          # Efecto espacial
-                   ti(month_num, k = 6) +      # Efecto temporal
-                   ti(X, Y, month_num, k = c(5, 5, 6)),  # Interacción
-                 data = datos,
-                 family = gaussian(link = "log"))
-summary(gam_time_better)
+gam_espacial <- gam(area ~ s(temp) + s(X, Y, k = 20) + s(FFMC),
+                   data = datos,
+                   family = gaussian(link = "log"))
+summary(gam_espacial)
 ```
-
-```{r}
-plot(gam_time_better, select = 3)  # Para ver el efecto ti(month_num)
-```
-

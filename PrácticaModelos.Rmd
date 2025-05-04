@@ -933,7 +933,7 @@ print(grafico_histograma_residuos(modelo_multiple))
 print(grafico_qqplot_residuos(modelo_multiple))
 ```
 
-Al histograma de residuos y al El "QQ-Plot" les ocurre lo mismo que al modelo simple, al primero gran concentración de residuos cerca del cero y con presencia de valores atípicos, en el segundo los residuos no siguen una distribución normal en la cola derecha. Ambos sugieren que no se sigue una distribución normal.
+Al histograma de residuos y al el "QQ-Plot" les ocurre lo mismo que al modelo simple, al primero gran concentración de residuos cerca del cero y con presencia de valores atípicos, en el segundo los residuos no siguen una distribución normal en la cola derecha. Ambos sugieren que no se sigue una distribución normal.
 
 #### **Prueba de Breusch-Pagan para homocedasticidad**
 
@@ -1273,95 +1273,159 @@ Por último, y saliéndose un poco del *scope* de la asignatura, los autores del
 
 # Parte 2
 
-## Binomial negativa
-
 ```{r}
 library(MASS)
-modelo_binom_neg <- glm.nb(area ~ DMC+ ISI +temp+RH+wind, data = datos)
-summary(modelo_binom_neg)
+library(mgcv)
+library(itsadug)
+library(ggplot2)
+library(patchwork)
+library(pROC)
 ```
-```{r}
-cat("Dispersión en Binomial Negativa:", modelo_binom_neg$theta, "\n")
-```
-
-```{r}
-plot(residuals(modelo_binom_neg, type = "deviance"))
-plot(modelo_binom_neg)
-```
-
-
-## Modleo Gamma
-```{r}
-log_area = datos$area+1
-```
-
-
-```{r}
-modelo_gamma <- glm(log_area ~ DMC+ ISI +temp+RH+wind+day,data = datos, family = Gamma(link = "log"))
-summary(modelo_gamma)
-```
-
-```{r}
-plot(modelo_gamma)
-```
-
 
 ## Modelo GAMs
 
-### Modelo GAM básico
+Los incendios forestales son fenómenos complejos influenciados por múltiples factores ambientales. Los modelos GAMs spueden llegar a ser una herramienta muy útil para este problema ya que permiten capturar relaciones no lineales sin imponer suposiciones sobre cómo interactúan los factores. Esta carácteristica seguramente sea de mucha ayuda para modelar patrones entre factores climáticos que determinan el comportamiento del fuego.
+
+#### Modelo GAM básico
+
+Para el modelo incial vamos a partir con las variables meteorológicas "básicas". 
 
 ```{r}
-gam1 <- gam(area ~ s(temp) + s(RH) + s(wind) + s(FFMC), 
-            data = datos, 
-            family = gaussian(link = "log"))
-summary(gam1)
+gam_basico <- gam(area ~ s(temp) + s(RH) + s(wind) + rain, 
+                 data = datos, 
+                 family = gaussian(link = "log"))
+summary(gam_basico)
 ```
 
+El modelo muestra un rendimiento limitado con una deviance del 28.1% y valores elevados del GCV. Este no explica correctamente el área de los incendios y limita su capacidad de predicción. Las tres variables son significativas, destacando el viento como el factor más importante. Estos resultados indican que aunque estas variables influyen en el modelo su efecto individual es insuficiente para explicar completamente el área quemada.
+
+### Modelo GAM Completo
+
+Dado que las variables "básicas" son insuficientes vamos a ampliar el modelo anterior añadiendo todos los índices FWI para ver si un modelo más completo mejora la capacidad predictiva.
+
 ```{r}
-gam2 <- gam(area ~ s(temp) + s(RH) + s(wind) + s(FFMC) + s(DMC) + s(DC) + s(ISI) + rain,
+gam_completo <- gam(area ~ s(temp) + s(RH) + s(wind) + s(FFMC) + s(DMC) + s(DC) + s(ISI) + rain,
             data = datos,
             family = gaussian(link = "log"))
-summary(gam2)
+summary(gam_completo)
 ```
 
+El modelo completo tiene problemas de estimación, con coeficientes y errores estándar extremadamente grandes. Ningún término muestra significación estadística con p-valores cercanos a 1 y con edf iguales 1, esto indica multicolinealidad entre las variables. Esto se puede deber a que estos índices se caculan a partir de combinaciones de las variables meteorológicas básicas, por lo tanto no aportan nueva información al modelo. Por lo que añadir todos los índices solo hace que empeore el modelo básico. 
+
+### Modelo GAM con Interacciones
+
+Como las variables "básicas" eran insuficientes por si solas y los índices no aportan información nueva, podemos hacer un modelo con interacciones entre pares de variables climáticas, intentando ver si los efectos combinados son más significativos que los individuales.
+
 ```{r}
-gam3 <- gam(area ~ s(temp, RH) + s(wind, FFMC) + s(DMC, DC) + s(ISI) + rain,
+gam_interacciones <- gam(area ~ s(temp, RH) + s(wind, FFMC) + s(DMC, DC) + s(ISI) + rain,
             data = datos,
             family = gaussian(link = "log"))
-summary(gam3)
+summary(gam_interacciones)
 ```
 
-## Modelo GAM con selección de variables
+El modelo mejora considerablemente con una deviance del 82.5% al introducir las interacciones entre variable, sugiriendo que los efectos combinados de las variables meteorológicas son muy importantes para entender los incendios. 
+
+La cambinación de temperatura y humedad resulta significativa. Este resultado tiene lógica si lo pensamos, ya que altas temperaturas y humedad baja son condiciones ideales para la propagación de un incedio. Además, el edf tan alto que tiene indica que es una relación no lineal compleja.  
+Sin embargo, las otras interacciones no alcanzan significanza, por lo que que solo ciertas combinaciones de variables son relevantes para la predicción del área quemada.
+
+### Modelo GAM con Selección de Variables
+
+Dado que ir buscando interacciones entre los índices y el resto de variables es ir un poco a ciegas por el bajo conocimiento que tenemos de este campo, podemos usar el argumento select de los modelos GAM. Este selecciona variables automaticamente aplicando una penalización identificando y eliminando términos innecesarios, manteniendo solo los que realmente aportan información. 
 
 ```{r}
-gam5 <- gam(area ~ s(temp) + s(RH) + s(wind) + s(FFMC) + s(DMC) + s(DC) + s(ISI) + rain,
+gam_seleccion <- gam(area ~ s(temp) + s(RH) + s(wind) + s(FFMC) + s(DMC) + s(DC) + s(ISI) + rain,
             data = datos,
             family = gaussian(link = "log"),
-            select = TRUE)  # Permite selección de variables
-summary(gam5)
+            select = TRUE)
+summary(gam_seleccion)
 ```
+
+El modelo mantiene la deviance del modelo con interacciones, el $R^2$ y el GCV, aumentan y disminuyen respectivamente, pero el cambio es mínimo. Donde si se nota una gran mejoria es en la significancia de las variables. 
+
+La temperatura, humedad y viento, son significativos, con edf altos que sugieren relaciones no lineales. Sin embargo, rain no muestra significancia estadística.
+Por parte de los índices FWI la mayoria tienen importancia significativa como FFMC, DMC e ISI, pero a excepción de ISI que tiene una edf alta mostrando no linealidad, la edf de FFMC y DMC es prácticamente igual a 0, lo que sugiere que su efecto es lineal.
+
+En el modelo anterior hemos comentado que la interacción entre temperatura y humedad era significativa, vamos a ver como afecta esta interacción en el modelo de selección de variables.
 
 ```{r}
-plot(gam5)
+gam_seleccion_interaccion <- gam(area ~ s(temp, RH) + s(wind) + s(FFMC) + s(DMC) + s(DC) + s(ISI) + rain,
+            data = datos,
+            family = gaussian(link = "log"),
+            select = TRUE)
+summary(gam_seleccion_interaccion)
 ```
 
-
-```{r}
-plot(gam5, 
-     residuals = TRUE,  
-     pch = 19,          
-     col = "blue",     
-     seWithMean = TRUE, 
-     rug = TRUE)
-```
-
+Vemos una mejoría respecto al modelo sin la interacción, con un deviance y $R^2$ superior, además de un GCV menor. La interacción y el viento son las únicas variables significativas, afirmando lo ya comentado en el modelo completo, que los índices FWI son combianciones de las variables originales y no aportan información nueva al modelo.
 
 ```{r}
 par(mfrow = c(2, 2))
-gam.check(gam5)
+gam.check(gam_seleccion_interaccion)
 ```
 
-## Ver como afectan las variables según las coordenadas
+Si analizamos los residuos de este modelo podemos ver como se mantienen los problemas comentados en los modelos de la primera entrega, en el QQ-Plot observamos como los residuos no se ajustan a la recta por lo que el modelo no sigue una distribución normal.
+
+En el gráfico de "Resids vs linear pred.", los residuos no se distribuyen aleatoriamente altededor del cero, con una varianza heterogenea y destaca un outlier en -120. EL histograma de los residuos tiene gran concentración de residuos cerca del cero y con solo una cola hacia la derecha lo que confirma que los residuos no siguen una distribución normal. 
+
+Por último, el gráfico de "Response vs Fitted values" muestra que la mayoría de puntos se agrupan abajo a la izquierda del gráfico, pero existen tres observaciones extremas que se alinean formando una diagonal. Estos outliers, seguramente están influenciando el ajuste del modelo.
+
+```{r}
+plot(gam_seleccion_interaccion, pages = 1, scheme = 2, shade = TRUE)
+```
+
+Si ahora observamos los plots de cada predictor del modelo podemos ver como cada variable influye en la variable objetivo. Los gráficos de las variables FFMC, DMC, DC e ISI son líneas rectas, lo que confirma lo que habíamos comentado, su efecto en el modelo es lineal. 
+
+Los gráficos más interesantes de analizar son el del viento y el de la interacción. El gráfico del viento tiene forma de parabola. La zona central presenta un intervalo de confianza estrecha, indicando mayor certeza del efecto. En cambio, los extremos muestran intervalos mucho más amplios, sugiriendo que el modelo tiene menos confianza en esas regiones.
+
+Finalmente, la interacción entre temperatura y humedad se representa con un gráfico donde el eje X corresponde a temperatura y el Y a humedad relativa, mientras que los colores y curvas de nivel indican la magnitud del efecto.
+
+Las zonas rojas indican mayor peligro de área quemada, las áreas naranjas un riesgo intermedio y las amarillas son las de menor riesgo. Es curioso ver como hay mucho riesgo en temperaturas muy bajas, y también en humedades muy altas, lo que ha primera vista es antiintuitivo. Esto se puede deber a errores de medición pero no creemos que sea la única posible razón. Otra opción es que como en nuestro dataset hay tan pocos datos muchas combinaciones ocuren en solo una observación, vamos a verlo en un gráfico.
+
+```{r}
+ggplot(datos, aes(x = temp, y = RH, color = area > 0)) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Incendios en espacio Temp-RH", color = "Hubo incendio?")
+```
+
+Si nos fijamos en la parte de abajo a la izquierda, es decir bajas temperaturas y poca humedad solo hay dos observaciones en las que si ha habido incendio lo que hace que el modelo pinte esa parte como de alto riesgo, cuando la lógica dice que no es demasiado probable que ocurra un incedio en temperaturas tan bajas aunque haya poca humedad. Lo que si es muy extraño es que pinte la parte superior de rojo cuando solo hay un incedio de cinco observaciones. 
+
+```{r}
+incendio_atipico <- subset(datos, temp < 15 & RH > 90 & area > 0)
+cat("Area:\n")
+incendio_atipico$area 
+cat("Percentiles:\n")
+quantile(datos$area, probs = seq(0, 1, 0.1))
+```
+
+Este incendio esta dentro del percentil del 90% por lo que es uno de los más grandes observados, por eso el modelo lo considera significativo. Ahora se entiende un poco mejor como funciona el gráfico, tiene en cuenta el número de incedios y que tan "importantes" son, por eso pinta como significativos casos que a primera vista no tienen sentido.
+
+### Otras modificaciones
+
+Como los residuos del modelo de selección no cumplen con los supuestos vamos a buscar mejorarlos a través de transformaciones en la variable objetivo.
+
+```{r}
+gam_seleccion_interaccion_sqrt <- update(gam_seleccion_interaccion, 
+                                       formula = sqrt(area) ~ .,
+                                       data = datos)
+par(mfrow = c(2, 2))
+gam.check(gam_seleccion_interaccion_sqrt)
+```
+
+Al hacer la raíz cuadrada del área los residuos mejoran levemente, aunque siguen habiendo problemas, como falta de normalidad o varianza heterogenia, pero podemos buscar alguna otra transformación que se adapte mejor y solucione estos problemas.
+De todas formas vamos a ver como es la significancia de las variables de este modelo y su poder explicativo.
+
+```{r}
+summary(gam_seleccion_interaccion_sqrt)
+```
+
+El edf y la significancia de las variables es muy similar a la del modelo anterior con los únicos cambios notables en el p-valor de rain y DMC, que ahora son significativos, y que el edf de DMC y DC es mayor a uno por lo que ahora estas dos variables tienen una realación no lineal con el modelo. El problema de este modelo es su baja deviance y $R^2$ reduciendo en gran medida la capacidad explicativa del modelo. 
+
+Hemos probado varias transformaciones a parte de la raíz cuadrada como la logarítmica, la Yeo-Johnson o el Box-Cox, pero tenían $R^2$ y deviance extremadamente bajos, por lo que la única transformación que añadiremos a parte del area con valores mayores a 0 es la raíz para ejemplificar que se pueden mejorar los residuos pero con un coste alto en este caso. 
+
+# Trabajo a futuro
+
+Una posible ampliación de este trabajo sería incorporar el componente espacial al análisis predictivo. Hasta ahora, hemos ignorado estas variables por simplicidad, pero su inclusión puede aportar información valiosa sobre la distribución geográfica de los incendios.
+
+Vamos a explorar visualmente cómo varía la superficie quemada según la localización en el mapa. Esto podría revelar patrones que podrían señalar zonas más propensas a incendiarse.
 
 ```{r}
 ggplot(datos, aes(x = X, y = Y, fill = area)) + 
@@ -1377,49 +1441,124 @@ ggplot(datos, aes(x = X, y = Y, color = temp, size = area)) +
   labs(title = "Distribución espacial: Temperatura vs Área quemada")
 ```
 
+Si hacemos una tabla de frecuencia de X e Y podemos identificar qué combinaciones tienen mayor número de observaciones, lo que orienta la elección de coordeandas con datos suficientes para ajustar modelos.
+
 ```{r}
-table(datos$X,datos$Y)
+table(datos$Y,datos$X)
 ```
 
+El objetivo es construir modelos entrenados exclusivamente con los datos de cada coordenada, y cada uno permita predecir si habrá o no un incendio en función de ciertas condiciones climáticas. Lo vamos a hacer para cada celda con suficientes datos, por ejemplo más de 25 observaciones, y se ajustaremos un modelo de regresión logística para predecir la probabilidad de incendio. 
 
 ```{r}
-df1=datos[(datos$X==8 & datos$Y==6),]
-table(df1$area)
-y=df1$area>0
-modelo1=glm(y~df1$temp)
+df1 <- datos[(datos$X==8 & datos$Y==6),]
+y <- df1$area>0
 
-
-```
-Hacer exponenecial de estimate en valor absoluto, si el valor original es negativo "protege" de un incendio si es positivo "favorece" un incendio
-
-
-
-
-
-
-Ir probando areas y hacer esto
-
-
-```{r}
-modelo1=glm(y~(df1$temp>25) + (df1$RH<80))
-summary(modelo1)
-p1=predict(modelo1,type="response")
+modelo1 <- glm(y~(df1$temp ) + (df1$RH ))
+predicciones_prob <- predict(modelo1,type="response")
 hist(p1)
-table(p1>0.5,y)
+matriz_confusion <- table(predicciones_prob>0.5,y)
+cat("Matriz de confusión: \n")
+print(matriz_confusion)
+```
+
+A través de la matriz de confusión podemos calcular la precisión, sensibilidad y escifidad para evaluar el modelo. También vamos a calcular una curva ROC y analizar el AUC para medir la capacidad del modelo de discriminar entre incedios y no incedios.
+
+```{r}
+precision <- sum(diag(matriz_confusion)) / sum(matriz_confusion)
+sensibilidad <- sens <- matriz_confusion["TRUE", "TRUE"] / sum(matriz_confusion[, "TRUE"])
+especifidad <- matriz_confusion["FALSE", "FALSE"] / sum(matriz_confusion[, "FALSE"])
+
+cat("Precisión: \n")
+print(precision)
+cat("Sensibilidad: \n")
+print(sensibilidad)
+cat("Especifidad: \n")
+print(especifidad)
+```
+
+```{r}
+roc_obj <- roc(y, predicciones_prob)
+plot(roc_obj, main = "Curva ROC para Regresión Logística")
+
+auc_valor <- auc(roc_obj)
+print(paste("AUC:", round(auc_valor, 3)))
 ```
 
 
 
 
 
-
-
-
+Para celdas con suficientes incendios, se ajustaron modelos logísticos que predicen la probabilidad de incendio (área > 0) en función de condiciones meteorológicas. La calidad de cada modelo se evaluó usando la matriz de confusión, precisión, sensibilidad (capacidad para detectar incendios reales), especificidad (capacidad para evitar falsas alarmas) y el AUC (capacidad discriminativa). Esta información permite identificar qué zonas del parque son más predecibles y bajo qué condiciones.
 
 
 ```{r}
-gam_espacial <- gam(area ~ s(temp) + s(X, Y, k = 20) + s(FFMC),
-                   data = datos,
-                   family = gaussian(link = "log"))
-summary(gam_espacial)
+library(dplyr)
+library(pROC)
+
+# Filtrar celdas con al menos 25 observaciones
+conteos <- datos %>%
+  group_by(X, Y) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  filter(n >= 25)
+
+# DataFrame para guardar resultados
+resultados <- data.frame()
+
+# Loop por cada celda
+for (i in 1:nrow(conteos)) {
+  x_val <- conteos$X[i]
+  y_val <- conteos$Y[i]
+  
+  df1 <- datos %>% filter(X == x_val, Y == y_val)
+  y <- df1$area > 0
+  
+  # Verificamos que haya clases positivas y negativas
+  if (length(unique(y)) == 2) {
+    modelo <- glm(y ~ (temp) + (RH ), data = df1, family = binomial)
+    probas <- predict(modelo, type = "response")
+    pred_clase <- ifelse(probas > 0.5, 1, 0)
+    
+    # Matriz de confusión
+    conf_matrix <- table(Predicted = pred_clase, Actual = y)
+    
+    # Extraer VP, VN, FP, FN (con protección por si faltan)
+    VP <- ifelse("1" %in% rownames(conf_matrix) & "TRUE" %in% colnames(conf_matrix), conf_matrix["1", "TRUE"], 0)
+    VN <- ifelse("0" %in% rownames(conf_matrix) & "FALSE" %in% colnames(conf_matrix), conf_matrix["0", "FALSE"], 0)
+    FP <- ifelse("1" %in% rownames(conf_matrix) & "FALSE" %in% colnames(conf_matrix), conf_matrix["1", "FALSE"], 0)
+    FN <- ifelse("0" %in% rownames(conf_matrix) & "TRUE" %in% colnames(conf_matrix), conf_matrix["0", "TRUE"], 0)
+    
+    accuracy <- (VP + VN) / sum(conf_matrix)
+    sensibilidad <- ifelse((VP + FN) > 0, VP / (VP + FN), NA)
+    especificidad <- ifelse((VN + FP) > 0, VN / (VN + FP), NA)
+    
+    # AUC (puede fallar si no hay clases distintas)
+    auc_val <- tryCatch({
+      roc_obj <- roc(y, probas)
+      as.numeric(auc(roc_obj))
+    }, error = function(e) NA)
+    
+    resultados <- rbind(resultados, data.frame(
+      X = x_val, Y = y_val,
+      N = nrow(df1),
+      Accuracy = round(accuracy, 3),
+      Sensibilidad = round(sensibilidad, 3),
+      Especificidad = round(especificidad, 3),
+      AUC = round(auc_val, 3)
+    ))
+  }
+}
+
+# Mostrar resultados ordenados por AUC
+resultados <- resultados[order(-resultados$AUC), ]
+print(resultados)
 ```
+
+
+
+
+
+
+
+
+
+

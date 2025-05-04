@@ -1280,6 +1280,9 @@ library(itsadug)
 library(ggplot2)
 library(patchwork)
 library(pROC)
+library(dplyr)
+library(pROC)
+library(RColorBrewer)
 ```
 
 ## Modelo GAMs
@@ -1450,12 +1453,11 @@ table(datos$Y,datos$X)
 El objetivo es construir modelos entrenados exclusivamente con los datos de cada coordenada, y cada uno permita predecir si habrá o no un incendio en función de ciertas condiciones climáticas. Lo vamos a hacer para cada celda con suficientes datos, por ejemplo más de 25 observaciones, y se ajustaremos un modelo de regresión logística para predecir la probabilidad de incendio. 
 
 ```{r}
-df1 <- datos[(datos$X==8 & datos$Y==6),]
+df1 <- datos[(datos$X==4 & datos$Y==4),]
 y <- df1$area>0
 
-modelo1 <- glm(y~(df1$temp ) + (df1$RH ))
+modelo1 <- glm(y~(df1$temp > 25) + (df1$RH < 75))
 predicciones_prob <- predict(modelo1,type="response")
-hist(p1)
 matriz_confusion <- table(predicciones_prob>0.5,y)
 cat("Matriz de confusión: \n")
 print(matriz_confusion)
@@ -1476,89 +1478,23 @@ cat("Especifidad: \n")
 print(especifidad)
 ```
 
+La precisión del modelo es de 0.615, lo que significa que el 61.5% de las predicciones del modelo son correctas. Este valor es razonable y sugiere que el modelo tiene un desempeño bastante bueno.
+
+Por otro lado, la sensibilidad del modelo es 1, lo cual debería de ser excelente. ya que se identifican todos los casos positivos reales, y en este caso, el modelo no ha cometido ningún falso negativo. Esto es positivo, pero hay que tener cuidado, ya que al haber tan pocos datos por coordenada puede ser que el modelo está sobreajustado.
+
+Por últim, la especificidad es bastante baja, solo se identifican el 13% los casos negativos reales. Esto sugiere que el modelo tiene muchas "falsas alarmas", se clasifican como positivos muchos casos que en realidad son negativos. Este es un indicio claro de que el modelo está demasiado sesgado hacia la clasificación positiva y tiene problemas para distinguir entre las dos clases.
+
 ```{r}
 roc_obj <- roc(y, predicciones_prob)
 plot(roc_obj, main = "Curva ROC para Regresión Logística")
 
 auc_valor <- auc(roc_obj)
-print(paste("AUC:", round(auc_valor, 3)))
+cat("AUC: \n")
+print(auc_valor)
 ```
 
+El valor de AUC es 0.59 lo que quiere decir que  el modelo tiene dificultades para distinguir de manera confiable entre incedio y no incedio 
 
+Hemos intentado varias las condiciones climáticas  pero al haber tan pocas observaciones prácticamente estabamos cogiendolas a todas 
 
-
-
-Para celdas con suficientes incendios, se ajustaron modelos logísticos que predicen la probabilidad de incendio (área > 0) en función de condiciones meteorológicas. La calidad de cada modelo se evaluó usando la matriz de confusión, precisión, sensibilidad (capacidad para detectar incendios reales), especificidad (capacidad para evitar falsas alarmas) y el AUC (capacidad discriminativa). Esta información permite identificar qué zonas del parque son más predecibles y bajo qué condiciones.
-
-
-```{r}
-library(dplyr)
-library(pROC)
-
-# Filtrar celdas con al menos 25 observaciones
-conteos <- datos %>%
-  group_by(X, Y) %>%
-  summarise(n = n(), .groups = "drop") %>%
-  filter(n >= 25)
-
-# DataFrame para guardar resultados
-resultados <- data.frame()
-
-# Loop por cada celda
-for (i in 1:nrow(conteos)) {
-  x_val <- conteos$X[i]
-  y_val <- conteos$Y[i]
-  
-  df1 <- datos %>% filter(X == x_val, Y == y_val)
-  y <- df1$area > 0
-  
-  # Verificamos que haya clases positivas y negativas
-  if (length(unique(y)) == 2) {
-    modelo <- glm(y ~ (temp) + (RH ), data = df1, family = binomial)
-    probas <- predict(modelo, type = "response")
-    pred_clase <- ifelse(probas > 0.5, 1, 0)
-    
-    # Matriz de confusión
-    conf_matrix <- table(Predicted = pred_clase, Actual = y)
-    
-    # Extraer VP, VN, FP, FN (con protección por si faltan)
-    VP <- ifelse("1" %in% rownames(conf_matrix) & "TRUE" %in% colnames(conf_matrix), conf_matrix["1", "TRUE"], 0)
-    VN <- ifelse("0" %in% rownames(conf_matrix) & "FALSE" %in% colnames(conf_matrix), conf_matrix["0", "FALSE"], 0)
-    FP <- ifelse("1" %in% rownames(conf_matrix) & "FALSE" %in% colnames(conf_matrix), conf_matrix["1", "FALSE"], 0)
-    FN <- ifelse("0" %in% rownames(conf_matrix) & "TRUE" %in% colnames(conf_matrix), conf_matrix["0", "TRUE"], 0)
-    
-    accuracy <- (VP + VN) / sum(conf_matrix)
-    sensibilidad <- ifelse((VP + FN) > 0, VP / (VP + FN), NA)
-    especificidad <- ifelse((VN + FP) > 0, VN / (VN + FP), NA)
-    
-    # AUC (puede fallar si no hay clases distintas)
-    auc_val <- tryCatch({
-      roc_obj <- roc(y, probas)
-      as.numeric(auc(roc_obj))
-    }, error = function(e) NA)
-    
-    resultados <- rbind(resultados, data.frame(
-      X = x_val, Y = y_val,
-      N = nrow(df1),
-      Accuracy = round(accuracy, 3),
-      Sensibilidad = round(sensibilidad, 3),
-      Especificidad = round(especificidad, 3),
-      AUC = round(auc_val, 3)
-    ))
-  }
-}
-
-# Mostrar resultados ordenados por AUC
-resultados <- resultados[order(-resultados$AUC), ]
-print(resultados)
-```
-
-
-
-
-
-
-
-
-
-
+Hemos intentado ajustar las condiciones climáticas, (temp y RH mayores o menores a un valor), pero seguramente debido al poco número de observaciones disponibles por coordenada, casi todas las observaciones estaban siendo incluidas independientemente del "filtro" aplicado. Esto limita la posibilidad de evaluar las métricas de manera fiable y dificulta la interpretación del efecto específico de las condiciones climáticas sobre la predicción de incendios.

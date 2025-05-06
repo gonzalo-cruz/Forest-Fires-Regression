@@ -17,7 +17,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 ## Introducción
 
-Este trabajo estudia los factores que influyen en el área quemada en el Parque Natural de Montesinho en Portugal . El entendimiento de estos factores es crucial para manejar de manera eficaz las situaciones que pueden dar lugar a incendios, así como aplicar estrategias para mitigarlos. El dataset tiene información detallada de las condiciones climáticas (temperatura, humedad, viento y lluvia), índices de riesgo de incendio del Fire Weather Index (FFMC, DMC, DC, ISI), coordenadas X e Y, además de variables temporales como día y mes. Se trata de una tarea de regresión complicada debido a lo poco balanceada que está la variable objetivo (área), la cual incluye una gran cantidad de ceros. Esta práctica explora varios enfoques de modelado, desde regresiones lineales, tanto simples como múltiples, selección de variables y modelos no lineales para tratar de identficar el modelo óptimo para predecir el área quemada.
+Este trabajo estudia los factores que influyen en el área quemada en el Parque Natural de Montesinho en Portugal. El entendimiento de estos factores es crucial para manejar de manera eficaz las situaciones que pueden dar lugar a incendios, así como aplicar estrategias para mitigarlos. El dataset tiene información detallada de las condiciones climáticas (temperatura, humedad, viento y lluvia), índices de riesgo de incendio del Fire Weather Index (FFMC, DMC, DC, ISI), coordenadas X e Y, además de variables temporales como día y mes. Se trata de una tarea de regresión complicada debido a lo poco balanceada que está la variable objetivo (área), la cual incluye una gran cantidad de ceros. Esta práctica explora varios enfoques de modelado, desde regresiones lineales, tanto simples como múltiples, selección de variables y modelos no lineales para tratar de identficar el modelo óptimo para predecir el área quemada.
 
 ## Metodología
 
@@ -1306,6 +1306,7 @@ gam_basico <- gam(area ~ s(temp) + s(RH) + s(wind) + rain,
                  data = datos, 
                  family = gaussian(link = "log"))
 summary(gam_basico)
+cat("AIC del Modelo:", AIC(gam_basico), "\n")
 ```
 
 El modelo muestra un rendimiento limitado con una deviance del 28.1% y valores elevados del GCV. Este no explica correctamente el área de los incendios y limita su capacidad de predicción. Las tres variables son significativas, destacando el viento como el factor más importante. Estos resultados indican que aunque estas variables influyen en el modelo su efecto individual es insuficiente para explicar completamente el área quemada.
@@ -1319,6 +1320,7 @@ gam_completo <- gam(area ~ s(temp) + s(RH) + s(wind) + s(FFMC) + s(DMC) + s(DC) 
             data = datos,
             family = gaussian(link = "log"))
 summary(gam_completo)
+cat("AIC del Modelo:", AIC(gam_completo), "\n")
 ```
 
 El modelo completo tiene problemas de estimación, con coeficientes y errores estándar extremadamente grandes. Ningún término muestra significación estadística con p-valores cercanos a 1 y con edf iguales 1, esto indica multicolinealidad entre las variables. Esto se puede deber a que estos índices se caculan a partir de combinaciones de las variables meteorológicas básicas, por lo tanto no aportan nueva información al modelo. Por lo que añadir todos los índices solo hace que empeore el modelo básico. 
@@ -1332,6 +1334,7 @@ gam_interacciones <- gam(area ~ s(temp, RH) + s(wind, FFMC) + s(DMC, DC) + s(ISI
             data = datos,
             family = gaussian(link = "log"))
 summary(gam_interacciones)
+cat("AIC del Modelo:", AIC(gam_interacciones), "\n")
 ```
 
 El modelo mejora considerablemente con una deviance del 82.5% al introducir las interacciones entre variable, sugiriendo que los efectos combinados de las variables meteorológicas son muy importantes para entender los incendios. 
@@ -1349,6 +1352,7 @@ gam_seleccion <- gam(area ~ s(temp) + s(RH) + s(wind) + s(FFMC) + s(DMC) + s(DC)
             family = gaussian(link = "log"),
             select = TRUE)
 summary(gam_seleccion)
+cat("AIC del Modelo:", AIC(gam_seleccion), "\n")
 ```
 
 El modelo mantiene la deviance del modelo con interacciones, el $R^2$ y el GCV, aumentan y disminuyen respectivamente, pero el cambio es mínimo. Donde si se nota una gran mejoria es en la significancia de las variables. 
@@ -1364,6 +1368,7 @@ gam_seleccion_interaccion <- gam(area ~ s(temp, RH) + s(wind) + s(FFMC) + s(DMC)
             family = gaussian(link = "log"),
             select = TRUE)
 summary(gam_seleccion_interaccion)
+cat("AIC del Modelo:", AIC(gam_seleccion_interaccion), "\n")
 ```
 
 Vemos una mejoría respecto al modelo sin la interacción, con un deviance y $R^2$ superior, además de un GCV menor. La interacción y el viento son las únicas variables significativas, afirmando lo ya comentado en el modelo completo, que los índices FWI son combianciones de las variables originales y no aportan información nueva al modelo.
@@ -1431,7 +1436,6 @@ summary(gam_seleccion_interaccion_sqrt)
 El edf y la significancia de las variables es muy similar a la del modelo anterior con los únicos cambios notables en el p-valor de rain y DMC, que ahora son significativos, y que el edf de DMC y DC es mayor a uno por lo que ahora estas dos variables tienen una realación no lineal con el modelo. El problema de este modelo es su baja deviance y $R^2$ reduciendo en gran medida la capacidad explicativa del modelo. 
 
 Hemos probado varias transformaciones a parte de la raíz cuadrada como la logarítmica, la Yeo-Johnson o el Box-Cox, pero tenían $R^2$ y deviance extremadamente bajos, por lo que la única transformación que añadiremos a parte del area con valores mayores a 0 es la raíz para ejemplificar que se pueden mejorar los residuos pero con un coste alto en este caso. 
-
 
 ### Modelos GAM sin ceros
 
@@ -1511,14 +1515,14 @@ Como podemos ver, el modelo es peor en todos los aspectos. El ajuste es peor, el
 Por útimo vamos a hacer un modelo teniendo en cuenta las coordenadas x e y, además de otras variables ambientales
 
 ```{r}
-gam_espacial2 <- gam(area ~ s(temp) + s(X, Y) + s(RH) + s(ISI),
+gam_espacial <- gam(area ~ s(temp) + s(X, Y) + s(RH) + s(ISI),
                    data = datos2,
                    family = gaussian(link = "log"))
-summary(gam_espacial2)
-plot(gam_espacial2)
-gam.check(gam_espacial2)
-cat("AIC del Modelo:", AIC(gam_espacial2), "\n")
-cat("GCV del Modelo:",summary(gam_espacial2)$sp.criterion, "\n")
+summary(gam_espacial)
+plot(gam_espacial)
+gam.check(gam_espacial)
+cat("AIC del Modelo:", AIC(gam_espacial), "\n")
+cat("GCV del Modelo:",summary(gam_espacial)$sp.criterion, "\n")
 
 ```
 
@@ -1886,6 +1890,45 @@ También como tenemos muy pocos datos en cada zona, es muy dificil discriminar e
 
 Hemos ido evaluando cada modelo después de su ejecución, pero a continuación vamos a recopilar los mejores modelos de cada parte para evaluarlos y compararlos con el objetivo de elegir aquel que mejor se ajusta a las necesidades del problema. 
 
+```{r}
+# Creamos una lista con todos los modelos
+model_list <- list(
+  modelo_gam_seleccion_interaccion = gam_seleccion_interaccion,
+  modelo_gam8 = gam8,
+  modelo_gam7 = gam7,
+  modelo_gam4 = gam4,
+  modelo_gam_basico = gam_basico,
+  modelo_gam_espacial = gam_espacial
+)
+
+comparison_results <- compare_performance(model_list)
+print(comparison_results)
+plot(comparison_results)
+```
+
+```{r}
+library(leaflet)
+library(leaflet.extras)
+
+leaflet(datos) %>% 
+  addTiles() %>% 
+  addHeatmap(
+    lng = ~X,        # Usamos X como longitud (si son coordenadas reales)
+    lat = ~Y,        # Usamos Y como latitud
+    intensity = ~area,
+    radius = 10,      # Controla el tamaño de los puntos de calor
+    blur = 15,        # Suaviza la transición entre puntos
+    minOpacity = 0.1, # Opacidad mínima (para áreas de baja intensidad)
+    max = max(datos$area, na.rm = TRUE)  # Escala el valor máximo de intensidad
+  )
+```
+
+
+
 ## Conclusiones finales y trabajo futuro
+
+En nuestro dataset los incendios solo vienen representados por las coordenadas X e Y y su área, además del resto de variables climáticas e índices FWI, pero si se incluyeran variables adicionales como un ID por incendio o si su origen es natural o provocado daría información adicional que podrían mejorar la predicción de estos.
+
+
 
 

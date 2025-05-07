@@ -1272,16 +1272,6 @@ Por último, y saliéndose un poco del *scope* de la asignatura, los autores del
 
 # Parte 2
 
-En esta segunda parte de la práctica, implementaremos otra serie de modelos con el objetivo de predecir el área quemada como hacíamos en la primera parte, pero también con el objetivo de predecir si hay o no incendio en base a las condiciones dadas por nuestras variables, convirtiendolo además de en un problema de regresión, en un problema de clasificación.
-
-En este caso se aplicarán modelos de regresión generalizada como poisson, binomial negativa o regresión logística, además de GAMs. También haremos un análisis para predecir si hay incendio o no en las diferentes coordenadas del mapa mediante glm ajustándonos a una serie de condiciones que iremos eligiendo para cada caso. 
-
-Sigue siendo una tarea de regresión complicada debido a la naturaleza de los datos, pero estos modelos más complejos nos ayudarán a predecir con mayor precisión el área quemada en los incendios. 
-
-En cuanto a la **metodología**, esta es similar a la primera parte, solo que en esta ocasión no es necesario un análisis exploratorio de los datos ya que este ya se realizó. 
-
-Por tanto, primeramente iremos haciendo los distintos modelos y evaluándolos utilizando las diferentes métricas. Después se hará una comparación de los modelos, justificando las elecciones y eligiendo modelos para las diferentes situaciones. Por último se extraerán unas conclusiones de nuestro análisis, destacando los hallazgos y las limitaciones, así como planteando trabajo a futuro para mejorar el análisis. 
-
 Importamos las librerías de esta parte
 ```{r}
 library(MASS)
@@ -1291,6 +1281,242 @@ library(ggplot2)
 library(patchwork)
 library(pROC)
 ```
+
+## Modelos de regresión generalizada
+
+### Modelo logístico
+
+Para poder aplicar un modelo de regresión logística, es necesario que la variable dependiente sea binaria (es decir, que solo tenga dos posibles valores: 0 o 1). En nuestro caso, la variable original area representa el área quemada en un incendio forestal, y es de tipo continua. Por esta razón, la transformamos en una nueva variable llamada incendio_grande, que toma el valor 1 si el área quemada es mayor que cero, y 0 en caso contrario. 
+
+En cuanto a las variables explicativas, realizamos un análisis de correlación para identificar cuáles tenían una relación más fuerte con area. A partir de ese previo análisis, seleccionamos las tres variables más relevantes:
+
+  * temp (temperatura)
+
+  * DMC (índice de humedad)
+
+  * X (coordenada espacial en el eje horizontal del mapa).
+
+```{r}
+# Creamos la variable binaria: incendio_grande = 1 si area > 0
+datos$incendio_grande <- ifelse(datos$area > 0, 1, 0)
+
+# Modelo de regresión logística
+modelo_logistico <- glm(incendio_grande ~ temp + DMC + X , family = binomial, data = datos)
+
+# Resumen del modelo
+summary(modelo_logistico)
+```
+
+Después de ajustar el modelo de regresión logística con las variables temp, DMC y X, observamos que el intercepto es estadísticamente significativo (p = 0.0453), lo que indica una probabilidad base de que ocurra un incendio aunque las otras variables sean cero. Sin embargo, las tres variables predictoras no resultaron ser significativas individualmente al nivel del 5%.
+
+La variable temp tiene un coeficiente positivo, lo cual indica que a mayor temperatura podría aumentar la probabilidad de incendio, aunque con un p valor de 0.2112 no se puede considerar un efecto claro. Lo mismo ocurre con DMC, cuyo efecto es muy pequeño y no significativo (p = 0.4603). La variable X, que representa una coordenada espacial, muestra una relación más cercana a la significación (p = 0.1247), lo que sugiere que podría tener cierto peso en el modelo dependiendo de la zona geográfica.
+
+Aunque el modelo logra reducir levemente la deviance con respecto al modelo nulo, la mejora no es muy grande (de 715.69 a 709.84), y el valor del AIC (717.84) será útil para comparar con otros posibles modelos. Es decir, aunque las variables elegidas tenían alta correlación con el área quemada, no nos muestran una relación estadísticamente fuerte con la probabilidad de que el incendio sea grande en este modelo concreto.
+
+
+```{r}
+# Predicciones de la probabilidad de que el incendio sea grande
+predicciones <- predict(modelo_logistico, type = "response")
+
+# Ver las primeras predicciones
+head(predicciones)
+```
+
+Al observar las primeras probabilidades generadas por el modelo (por ejemplo, 0.47, 0.53, 0.51?), vemos que se sitúan en torno al 50%. Esto quiere decir que el modelo no se muestra muy seguro a la hora de clasificar si un incendio será grande o no, ya que no da valores muy cercanos ni al 0 ni al 1. En general, da la impresión de que el modelo tiene una capacidad algo limitada para diferenciar entre incendios grandes y pequeños, aunque sí ofrece una idea aproximada del riesgo en cada caso.
+
+```{r}
+# Predicciones de probabilidad
+predicciones_prob <- predict(modelo_logistico, type = "response")
+
+# Clasificación con un umbral de 0.5
+predicciones_clase <- ifelse(predicciones_prob > 0.5, "Sí", "No")
+
+# Creamos matriz de confusión 
+tabla_confusion <- table(Predicho = predicciones_clase, Real = datos$incendio_grande)
+print(tabla_confusion)
+```
+
+Con respecto a la matriz de confusión, vemos que el modelo ha clasificado correctamente 106 incendios que no fueron grandes y 186 que sí lo fueron. Sin embargo, también ha cometido errores: clasificó como pequeños 84 incendios que en realidad fueron grandes, y predijo como grandes 141 incendios que no lo eran. Esto nos indica que el modelo tiene cierta capacidad para distinguir entre incendios grandes y pequeños, pero aún comete bastantes errores, especialmente a la hora de predecir incendios grandes (84 fallos en ese caso). 
+
+
+```{r}
+# Calculamos precisión del modelo
+accuracy <- sum(diag(tabla_confusion)) / sum(tabla_confusion)
+print(paste("Precisión:", round(accuracy, 3)))
+```
+
+La precisión del modelo es de 0.565, lo que significa que el 56.5% de las predicciones realizadas por el modelo fueron correctas. Aunque no es un valor extremadamente alto, sugiere que el modelo tiene un rendimiento moderado en la clasificación de incendios grandes y pequeños.
+
+```{r}
+# Curva ROC
+roc_obj <- roc(datos$incendio_grande, predicciones_prob)
+
+# Grafica de la curva ROC
+plot(roc_obj, main = "Curva ROC para el modelo de incendios")
+
+# Calcular AUC
+auc_valor <- auc(roc_obj)
+print(paste("AUC:", round(auc_valor, 3)))
+```
+
+El valor AUC de 0.565 indica que el modelo tiene una capacidad baja para diferenciar entre incendios grandes y pequeños. Esto se puede deber a que las variables elegidas (temp, DMC y X) no explican del todo bien el comportamiento del área quemada. Además, el propio conjunto de datos tiene correlaciones débiles con el área, lo que limita la precisión del modelo.
+
+Por ello vamos a probar a incluir más varibles a ver si el modelo mejora:
+
+```{r}
+# Creamos la variable binaria: incendio_grande = 1 si area > 0
+datos$incendio_grande_ampliado <- ifelse(datos$area > 0, 1, 0)
+
+# Modelo de regresión logística con más variables
+modelo_logistico_ampliado <- glm(incendio_grande_ampliado ~ temp + DMC + X + DC + FFMC + ISI + RH, 
+                                 family = binomial, data = datos)
+
+# Resumen del modelo ampliado
+summary(modelo_logistico_ampliado)
+```
+
+Al ampliar el modelo incluyendo más variables (DC, FFMC, ISI y RH), observamos que la desviación residual disminuye ligeramente de 709.84 a 706.61, lo que indica una mejora muy pequeña en el ajuste del modelo. Sin embargo, ninguna de las nuevas variables añadidas resulta ser estadísticamente significativa, y en general, los p valores siguen siendo altos. Además, el AIC aumenta levemente de 717.84 a 722.61, lo que nos indica que el modelo más simple con solo tres variables podría ser preferible al no aportar el modelo ampliado una mejora sustancial. En resumen, añadir más variables no ha mejorado claramente la capacidad predictiva del modelo y podría estar introduciendo ruido innecesario.
+
+
+```{r}
+# Predicciones de probabilidad con el modelo ampliado
+probabilidades_incendio_ampliado <- predict(modelo_logistico_ampliado, type = "response")
+
+# Clasificación con un umbral de 0.5
+predicciones_clase_ampliada <- ifelse(probabilidades_incendio_ampliado > 0.5, "Sí", "No")
+
+# Creamos matriz de confusión 
+tabla_confusion_ampliada <- table(Predicho = predicciones_clase_ampliada, Real = datos$incendio_grande)
+print(tabla_confusion_ampliada)
+```
+
+En esta matriz (modelo con más variables), el número de aciertos en incendios grandes (196) ha aumentado ligeramente respecto al modelo con menos variables (186), lo cual indica que el modelo ahora detecta mejor los incendios reales. Sin embargo, también ha aumentado el número de falsos positivos (158 frente a 141), es decir, predice más veces que habrá un incendio grande cuando en realidad no lo hay. En general, el nuevo modelo mejora un poco la detección de incendios reales, aunque pierde algo de precisión en los casos negativos.
+
+```{r}
+# Curva ROC con las predicciones del nuevo modelo
+roc_obj_ampliado <- roc(datos$incendio_grande, probabilidades_incendio_ampliado)
+
+# Graficamos la curva ROC
+plot(roc_obj_ampliado, main = "Curva ROC para el modelo de incendios (con más variables)")
+
+# Calculamos AUC
+auc_valor_ampliado <- auc(roc_obj_ampliado)
+print(paste("AUC:", round(auc_valor_ampliado, 3)))
+```
+
+Análisis de AUC:
+
+* Modelo con 3 variables: la AUC que hemos obtenido fue de 0.565, lo que nos muestra que el modelo tiene una capacidad moderada para predecir la variable objetivo.
+
+* Modelo ampliado (más variables): la AUC fue 0.564, un valor prácticamente igual al del modelo anterior, lo que sugiere que añadir más variables no ha tenido un impacto significativo en la mejora de las predicciones.
+
+**Conclusión:**
+
+Ambos modelos presentan AUCs similares y relativamente bajas, lo que indica que ninguno tiene un poder predictivo muy alto. Dado que el modelo con 3 variables es más sencillo y presenta un rendimiento casi igual al modelo ampliado, consideramos que es preferible el modelo más simple (el de 3 variables), ya que no aporta demasiada mejora en la precisión.
+
+### Regresión Poisson
+
+Vamos a utilizar el modelo de Poisson para simular la cantidad de área quemada en incendios forestales, tomando en cuenta variables como temperatura, humedad relativa y viento.
+
+```{r}
+# Simulación de datos para el área quemada en incendios
+set.seed(123)
+n <- nrow(datos)  
+
+# Generamos la tasa de área quemada (lambda) usando un modelo logarítmico
+lambda <- exp(0.05 * datos$temp - 0.03 * datos$RH + 0.1 * datos$wind)
+
+# Generamos el área quemada como una variable de Poisson
+area_simulada <- rpois(n, lambda)
+
+# Creamos el data frame con los datos simulados
+datos_area_simulados <- data.frame(area_simulada, datos$temp, datos$RH, datos$wind)
+head(datos_area_simulados)
+```
+
+```{r}
+# Añadimos la variable simulada al data frame original
+datos$area_simulada <- area_simulada
+
+# Ajustamos el modelo directamente con 'datos'
+modelo_poisson_area <- glm(area_simulada ~ temp + RH + wind, 
+                           data = datos, 
+                           family = poisson)
+
+# Resumen
+summary(modelo_poisson_area)
+```
+
+En nuestro modelo de regresión de Poisson, observamos que las tres variables incluidas (temperatura, humedad relativa y viento) resultan estadísticamente significativas. La temperatura y el viento tienen un efecto positivo sobre el área quemada simulada, es decir, a mayor temperatura o mayor velocidad del viento, se espera un incremento en el área afectada. Por el contrario, la humedad relativa muestra un efecto negativo, lo cual es coherente, ya que una mayor humedad suele dificultar la propagación del fuego. El ajuste general del modelo es aceptable, con una reducción considerable en la desviación residual respecto a la nula.
+
+
+```{r}
+# Exponenciamos los coeficientes para interpretarlos como tasas relativas
+exp(coef(modelo_poisson_area))
+```
+Tras exponenciar los coeficientes del modelo de Poisson, interpretamos los efectos de las variables sobre el área quemada esperada de la siguiente manera:
+
+* Temperatura (temp): el valor 1.0547 indica que, por cada grado adicional, la tasa esperada de área quemada aumenta aproximadamente un 5.5%, manteniendo el resto de variables constantes.
+
+* Humedad relativa (RH): el valor 0.9691 sugiere que, por cada unidad extra de humedad, la tasa esperada de área quemada disminuye un 3.1%.
+
+* Viento (wind): Con un valor de 1.1063, por cada unidad adicional de velocidad del viento, la tasa de área quemada aumenta un 10.6%.
+
+* Intercepto: el valor de 0.9433 representa la tasa base esperada de área quemada cuando todas las variables predictoras valen cero.
+
+```{r}
+# Calculamos la relación entre el deviance y los grados de libertad
+deviance <- modelo_poisson_area$deviance
+grados_libertad <- modelo_poisson_area$df.residual
+sobredispersion <- deviance / grados_libertad
+
+print(paste("Índice de Sobredispersión:", round(sobredispersion, 2)))
+```
+El índice de sobredispersión obtenido, 1.17, muestra que existe una ligera sobredispersión en los datos. Esto quiere decir que el modelo de Poisson no está capturando toda la variabilidad de los incendios de forma precisa. Aunque el valor no es muy elevado, al ser mayor que 1, nos indica que el modelo podría no ser el más adecuado para nuestro conjunto de datos.
+
+```{r}
+# Gráfico de residuos deviance para evaluar el ajuste
+plot(residuals(modelo_poisson_area, type = "deviance"), 
+     main = "Residuos Deviance", 
+     ylab = "Residuos", 
+     xlab = "Índice")
+abline(h = 0, col = "red")
+```
+Observamos que  los residuos parecen estar razonablemente distribuidos sin patrones claros de ajuste defectuoso, aunque algunos valores atípicos podrían estar presentes.
+
+### Regresión binomial negativa
+
+A continuación, vamos a ajustar el modelo binomial negativo con el objetivo de predecir el área afectada por incendios, utilizando variables como la temperatura (temp), la humedad relativa (RH) y el viento (wind).
+
+```{r}
+# Ajuste de un modelo binomial negativo con los datos reales de incendios
+modelo_binom_neg <- glm.nb(area ~ temp + RH + wind, data = datos)
+```
+
+```{r}
+# Resumen del modelo binomial negativo
+summary(modelo_binom_neg)
+```
+
+En este caso, hemos ajustado un modelo binomial negativo para predecir el área quemada en incendios en función de tres variables: temperatura (temp), humedad relativa (RH) y viento (wind).
+
+* Temperatura (temp) muestra un efecto positivo y significativo en el área quemada: por cada aumento de 1 unidad en la temperatura, el área quemada aumenta un 6.89%. Esto indica que un aumento en la temperatura favorece el incremento en la extensión del área afectada por el incendio.
+
+* Humedad relativa (RH) y viento (wind) no parecen tener un impacto significativo en el área quemada en este modelo, ya que sus p valores son mayores a 0.05. Esto sugiere que, en este caso, no contribuyen de manera relevante a la predicción del área quemada.
+
+El valor de Theta es 0.1654, lo cual indica que hay baja dispersión en los datos, sugiriendo que el modelo binomial negativo es adecuado para nuestro conjunto de datos. En cuanto al ajuste del modelo, observamos que la desviación residual es de 488.58 y el AIC es 2682.6, lo cual nos proporciona una idea de la calidad del modelo. El valor del AIC es relativamente alto, lo que puede indicar que aún existe cierta oportunidad de mejora en el ajuste.
+
+```{r}
+# Comparamos la dispersión con el modelo binomial negativo
+cat("Dispersión en Binomial Negativo:", modelo_binom_neg$deviance / modelo_binom_neg$df.residual, "\n")
+```
+El valor de 0.95 para la dispersión en el modelo binomial negativo indica que no hay sobredispersión significativa. Esto sugiere que el modelo se ajusta adecuadamente a los datos y no sería necesario realizar ajustes adicionales.
+
+```{r}
+cat("Dispersión en Binomial Negativa:", modelo_binom_neg$theta, "\n")
+```
+La dispersión en el modelo binomial negativa es 0.1654, lo que indica una baja dispersión en los datos. Esto sugiere que el modelo binomial negativa es adecuado, ya que puede manejar mejor la sobredispersión que el modelo de Poisson, ajustándose mejor a la variabilidad observada en los datos.
+
 
 ## Modelo GAMs
 
@@ -1927,7 +2153,25 @@ leaflet(datos) %>%
 
 ## Conclusiones finales y trabajo futuro
 
+Tras comparar los tres modelos (regresión logística, Poisson y binomial negativo), podemos decir lo siguiente:
+
+Modelo Logístico: este modelo está diseñado para predecir la probabilidad de que ocurra un evento, pero en nuestro caso, con una AUC de 0.565, no muestra un desempeño destacable en cuanto a capacidad predictiva.
+
+Modelo de Poisson: aunque el modelo de Poisson es adecuado para trabajar con conteos, en nuestro caso, el índice de sobredispersión de 1.17 sugiere que no captura completamente la variabilidad de los datos. Esto indica que este modelo no se ajusta de forma ideal a nuestros datos.
+
+Modelo Binomial Negativo: este modelo, parece ser el que mejor se ajusta a nuestros datos. La dispersión de 0.1654 indica que el modelo binomial negativo maneja mejor la sobredispersión. Además, los coeficientes del modelo son coherentes y el AIC de 2682.6 es relativamente bajo, lo que sugiere un buen ajuste.
+
 En nuestro dataset los incendios solo vienen representados por las coordenadas X e Y y su área, además del resto de variables climáticas e índices FWI, pero si se incluyeran variables adicionales como un ID por incendio o si su origen es natural o provocado daría información adicional que podrían mejorar la predicción de estos.
+
+En esta segunda parte de la práctica, implementaremos otra serie de modelos con el objetivo de predecir el área quemada como hacíamos en la primera parte, pero también con el objetivo de predecir si hay o no incendio en base a las condiciones dadas por nuestras variables, convirtiendolo además de en un problema de regresión, en un problema de clasificación.
+
+En este caso se aplicarán modelos de regresión generalizada como poisson, binomial negativa o regresión logística, además de GAMs. También haremos un análisis para predecir si hay incendio o no en las diferentes coordenadas del mapa mediante glm ajustándonos a una serie de condiciones que iremos eligiendo para cada caso. 
+
+Sigue siendo una tarea de regresión complicada debido a la naturaleza de los datos, pero estos modelos más complejos nos ayudarán a predecir con mayor precisión el área quemada en los incendios. 
+
+En cuanto a la **metodología**, esta es similar a la primera parte, solo que en esta ocasión no es necesario un análisis exploratorio de los datos ya que este ya se realizó. 
+
+Por tanto, primeramente iremos haciendo los distintos modelos y evaluándolos utilizando las diferentes métricas. Después se hará una comparación de los modelos, justificando las elecciones y eligiendo modelos para las diferentes situaciones. Por último se extraerán unas conclusiones de nuestro análisis, destacando los hallazgos y las limitaciones, así como planteando trabajo a futuro para mejorar el análisis.
 
 
 

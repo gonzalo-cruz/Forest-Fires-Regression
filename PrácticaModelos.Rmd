@@ -2219,5 +2219,10 @@ Por último, y saliéndose un poco del *scope* de la asignatura, los autores del
 
 También se deberían revisar los datos en sí tratando de añadir las variables antes mencionadas y, como mencionamos en la primera parte, se podría crear un simulador de incendios para poder tener así más datos de incendios simulados con diferentes condiciones y poder superar el mayor inconveniente que nos hemos encontrado, la falta de datos de incendios. Esto podría evitar que tengamos que utilizar modelos más complejos, pudiendo utilizar modelos más simples y facilmente explicables como los implementados en esta práctica, porque un buen modelo depende principalmente de unos buenos datos.
 
+## **Reparto del trabajo**
 
-
+- Modelos de regresión generalizada: Yasmin
+- GAMs: Marc y Gonzalo
+- Como afectan las variables segun las coordenadas: Marc y Gonzalo
+- Evaluación y comparativa de modelos: Marc y Gonzalo
+- Memoria escrita y conclusiones: todos

@@ -1,5 +1,5 @@
 ---
-title: "Práctica 1 Modelos de Regresión"
+title: "Práctica Modelos de Regresión"
 author: "Marc Gil Arnau, Gonzalo Cruz Gómez, Yasmin Ezzarqtouni Marzoug"
 date: "2025-02-20"
 output: 
@@ -12,8 +12,7 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
 ```
-
-## Índice
+# Parte 1
 
 ## Introducción
 
@@ -1281,6 +1280,8 @@ library(ggplot2)
 library(patchwork)
 library(pROC)
 ```
+
+## Introducción
 
 En esta segunda parte de la práctica, implementaremos otra serie de modelos con el objetivo de predecir el área quemada como hacíamos en la primera parte, pero también con el objetivo de predecir si hay o no incendio en base a las condiciones dadas por nuestras variables, convirtiendolo además de en un problema de regresión, en un problema de clasificación, en el cual buscaremos ver si hay o no incendio.
 
